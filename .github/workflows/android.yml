@@ -23,23 +23,27 @@ jobs:
           java-version: "21"
           cache: gradle
 
-      - uses: android-actions/setup-android@v3
+      - uses: android-actions/setup-android@v4
+        with:
+          cmdline-tools-version: 11.0
 
-      - name: Lisansları kabul et
+      - name: Accept SDK licenses
         run: yes | sdkmanager --licenses > /dev/null || true
 
-      - name: Android SDK bileşenleri
+      - name: Install Android SDK components
         run: sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
 
-      - name: Bağımlılıkları kur
+      - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: APK derle
+      - name: Build APK
         run: bun run apk
 
-      - name: APK'yı yükle
+      - name: Upload APK artifacts
         uses: actions/upload-artifact@v4
         with:
           name: ego-cepte-apk
-          path: dist/*.apk
+          path: |
+            dist/*.apk
+            android/app/build/outputs/apk/**/*.apk
           if-no-files-found: error
