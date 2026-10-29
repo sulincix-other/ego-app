@@ -6,7 +6,7 @@ services:
       context: .
       dockerfile: Dockerfile
     ports:
-      - "3000:3000"
+      - "12331:3000"
     environment:
       - NODE_ENV=production
     restart: unless-stopped
@@ -17,14 +17,3 @@ services:
       retries: 3
       start_period: 10s
 
-  ego-cepte-dev:
-    build:
-      context: .
-      dockerfile: Dockerfile.dev
-    ports:
-      - "3000:3000"
-    environment:
-      - NODE_ENV=development
-    volumes:
-      - .:/app
-    restart: unless-stopped

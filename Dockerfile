@@ -2,7 +2,7 @@
 # Alpine edge tabanlı, minimal ve hafif
 # Bun sonradan kurulur
 
-FROM alpine/edge
+FROM debian
 
 # Kurulum ayarları
 LABEL maintainer="EGO Cepte Team"
@@ -12,11 +12,10 @@ LABEL description="EGO Cepte - Ankara otobüs takip uygulaması"
 WORKDIR /app
 
 # Bun ve gerekli paketleri yükle
-RUN apk add --no-cache \
-    curl \
-    && curl --fsdl -o- 'https://bun.sh/install' | bash && \
-    rm -f curl \
-    && ln -s /root/.bun/bin/bun /usr/local/bin/bun
+RUN apt update
+RUN apt install -yq curl bash unzip
+RUN curl -L -o- 'https://bun.sh/install' | bash
+RUN ln -s /root/.bun/bin/bun /usr/local/bin/bun
 
 # Cache dizini oluştur
 RUN mkdir -p /app/node_modules/.cache/bun
