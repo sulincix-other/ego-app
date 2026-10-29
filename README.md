@@ -141,6 +141,17 @@ bun run apk --release
 bun run android:icons
 ```
 
+### Temizlik
+
+Derleme çıktılarını ve `cap sync` tarafından üretilen Android dosyalarını silmek için:
+
+```bash
+bun run clean        # dist/ + Android build çıktıları
+bun run clean --all  # ek olarak node_modules
+```
+
+Komut kaynak dosyalara, ikonlara ve imza anahtarlarına dokunmaz.
+
 ### GitHub Actions
 
 `.github/workflows/android.yml` her push/PR'da debug APK derler ve
