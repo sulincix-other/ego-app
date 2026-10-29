@@ -1,1 +1,11 @@
 ego-bus-tracker
+
+# Bağımlılıklar
+node_modules/
+
+# Derleme çıktıları
+dist/
+
+# Android imza dosyaları (asla commit'lenmemeli)
+*.jks
+*.keystore

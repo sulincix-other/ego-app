@@ -29,6 +29,53 @@ const UID =
     return id;
   })();
 
+// ---------------- API adresleri ----------------
+// Web'de (bun server.js) istekler CORS başlıklı yerel proxy üzerinden gider.
+// Android kabuğunda (Capacitor) ise doğrudan EGO uçlarına gider; CapacitorHttp
+// isteği yerel katmanda yaptığı için tarayıcı CORS kuralı uygulanmaz.
+
+const isNativeApp =
+  typeof window !== "undefined" &&
+  window.Capacitor?.isNativePlatform?.() === true;
+
+const EGO_HIBRIT_BASE = "https://egocptsrvand.ego.gov.tr/hibrit/";
+const EGO_NG_BASE = "https://egocptngapi.ego.gov.tr";
+
+// /api/next/<yol> -> yeni nesil API yolu
+const NG_PATHS = {
+  "config": "/api/config",
+  "config/ssl-pins": "/api/config/ssl-pins",
+  "geocode": "/api/geocode",
+  "route/compute": "/v1/route/compute",
+};
+
+/** Proxy ya da doğrudan EGO adresi üretir. */
+function apiUrl(kind, path, query = new URLSearchParams()) {
+  const suffix = query.toString() ? `?${query}` : "";
+
+  if (kind === "hibrit") {
+    return isNativeApp
+      ? `${EGO_HIBRIT_BASE}${path}${suffix}`
+      : `/api/hibrit/${path}${suffix}`;
+  }
+
+  const target = NG_PATHS[path];
+  if (!target) throw new Error(`Bilinmeyen API yolu: ${path}`);
+
+  return isNativeApp
+    ? `${EGO_NG_BASE}${target}${suffix}`
+    : `/api/next/${path}${suffix}`;
+}
+
+// Ayarlar ekranındaki kaynak etiketlerini ortama göre güncelle
+const sourceLabel = isNativeApp ? "doğrudan EGO API" : null;
+if (sourceLabel) {
+  const configSource = $("#config-source");
+  const pinsSource = $("#pins-source");
+  if (configSource) configSource.textContent = sourceLabel;
+  if (pinsSource) pinsSource.textContent = sourceLabel;
+}
+
 /** Hibrit ASP uçlarına istek. */
 async function hibrit(endpoint, params = {}) {
   const query = new URLSearchParams({
@@ -37,14 +84,12 @@ async function hibrit(endpoint, params = {}) {
     LAN: "tr",
     ACSMode: "0",
   });
-  return request(`/api/hibrit/${endpoint}?${query}`);
+  return request(apiUrl("hibrit", endpoint, query));
 }
 
 /** Yeni nesil API'ye istek. */
 async function nextApi(path, params = {}) {
-  const query = new URLSearchParams(params);
-  const suffix = query.toString() ? `?${query}` : "";
-  return request(`/api/next/${path}${suffix}`);
+  return request(apiUrl("next", path, new URLSearchParams(params)));
 }
 
 /** Ortak istek: yanıt her zaman JSON'a çevrilir. */
@@ -301,7 +346,6 @@ stopInput.addEventListener("keydown", (e) => {
 
 const lineInput = $("#line-input");
 const lineResults = $("#line-results");
-const lineChips = $("#line-chips");
 
 async function loadLines() {
   if (state.lines) {
@@ -329,21 +373,6 @@ function renderLines() {
         String(l.kod).toLocaleLowerCase("tr").includes(q) ||
         String(l.ad).toLocaleLowerCase("tr").includes(q),
       );
-
-  // Hızlı filtre çipleri
-  const chips = [
-    { key: "", label: "Tümü" },
-    { key: "metrobüs", label: "Metrobüs" },
-    { key: "otobüs", label: "Otobüs" },
-    { key: "ankara", label: "Ankara" },
-  ];
-
-  lineChips.innerHTML = chips
-    .map(
-      (c) =>
-        `<button class="chip ${state.lineQuery === c.key ? "active" : ""}" data-chip="${esc(c.key)}">${c.label}</button>`,
-    )
-    .join("");
 
   if (!filtered.length) {
     lineResults.innerHTML = emptyState("🚌", "Eşleşen hat bulunamadı.");
@@ -376,14 +405,6 @@ function lineItem(line) {
 
 lineInput.addEventListener("input", () => {
   state.lineQuery = lineInput.value.trim();
-  renderLines();
-});
-
-lineChips.addEventListener("click", (e) => {
-  const chip = e.target.closest("[data-chip]");
-  if (!chip) return;
-  lineInput.value = chip.dataset.chip;
-  state.lineQuery = chip.dataset.chip;
   renderLines();
 });
 
@@ -552,7 +573,7 @@ $("#prewarm-btn").addEventListener("click", async (e) => {
   out.textContent = "Çalıştırılıyor…";
 
   try {
-    const res = await fetch("/api/next/route/compute");
+    const res = await fetch(apiUrl("next", "route/compute"));
     out.textContent = `Yanıt: ${res.status} ${res.statusText}`;
     toast("Rota servisi ısıtıldı.", "ok");
   } catch (err) {
@@ -581,13 +602,13 @@ async function openStopDetail(kod, ad) {
     </div>
 
     <div class="card">
-      <div class="card-head"><h3>Geçen hatlar</h3></div>
-      <div id="sd-lines"><div class="skeleton"></div></div>
+      <div class="card-head"><h3>Canlı araçlar</h3><span class="badge" id="sd-live-time">—</span></div>
+      <div id="sd-live"><div class="skeleton"></div><div class="skeleton"></div></div>
     </div>
 
     <div class="card">
-      <div class="card-head"><h3>Canlı araçlar</h3><span class="badge" id="sd-live-time">—</span></div>
-      <div id="sd-live"><div class="skeleton"></div><div class="skeleton"></div></div>
+      <div class="card-head"><h3>Geçen hatlar</h3></div>
+      <div id="sd-lines"><div class="skeleton"></div></div>
     </div>
 
     <div class="card">
@@ -732,18 +753,29 @@ function renderVehicles(box, table) {
     return;
   }
 
-  // "Sonraki hareket" satırları (arac_no === "-") birden fazla olabilir
+  // "Sonraki hareket" satırları (arac_no === "-") program bilgisidir; canlı
+  // araçların altında gösterilir. Canlı araçlar ise varış süresine göre
+  // sıralanır, böylece en yakın otobüs en üstte olur.
   const nextRows = table.filter((r) => r.arac_no === "-");
-  const vehicles = table.filter((r) => r.arac_no !== "-");
+  const vehicles = table
+    .filter((r) => r.arac_no !== "-")
+    .sort((a, b) => vehicleEta(a) - vehicleEta(b));
 
   let html = "";
+
+  if (!vehicles.length && !nextRows.length) {
+    box.innerHTML = `<p class="muted small">Araç bulunamadı.</p>`;
+    return;
+  }
+
+  html += vehicles.map(vehicleCard).join("");
 
   html += nextRows
     .map(
       (next) => `
       <div class="vehicle next">
         <div class="v-main">
-          <div class="v-title">Sonraki hareket${next.hat_kod ? ` · ${esc(next.hat_kod)}` : ""}</div>
+          <div class="v-title">${esc(next.hat_no || next.hat_kod || "Hat")}</div>
           <div class="v-sub">${esc(String(next.sure || "").replace(/\n/g, " · "))}</div>
           ${next.hat_ad ? `<div class="v-sub" style="color:#fcd34d">🚌 ${esc(next.hat_ad)}</div>` : ""}
         </div>
@@ -753,17 +785,23 @@ function renderVehicles(box, table) {
     )
     .join("");
 
-  if (!vehicles.length) {
-    if (!nextRows.length) {
-      box.innerHTML = `<p class="muted small">Araç bulunamadı.</p>`;
-      return;
-    }
-    box.innerHTML = html;
-    return;
+  box.innerHTML = html;
+}
+
+/** Varış süresini saniye cinsinden döndürür; bilinmeyenler sona gider. */
+function vehicleEta(v) {
+  const sure = String(v.sure || "").toLowerCase();
+
+  // Durum metni sayısal değerden daha güvenilir
+  if (sure.includes("geçti")) return Number.MAX_SAFE_INTEGER;
+  if (sure.includes("geldi")) return -1;
+
+  const seconds = Number(v.saniye);
+  if (Number.isFinite(seconds) && seconds >= 0 && seconds < 999999) {
+    return seconds;
   }
 
-  html += vehicles.map(vehicleCard).join("");
-  box.innerHTML = html;
+  return Number.MAX_SAFE_INTEGER - 1;
 }
 
 function vehicleCard(v) {
@@ -771,7 +809,10 @@ function vehicleCard(v) {
   const cls = sure === "Geldi" ? "ok" : sure === "Geçti" ? "bad" : "";
   const statusPill = sure ? `<span class="eta">${esc(sure)}</span>` : `<span class="eta">—</span>`;
 
+  const lineNo = v.hat_no || v.hat_kod || "Hat";
+
   const meta = [];
+  if (v.arac_no && v.arac_no !== v.plaka_no) meta.push(`🚍 ${esc(v.arac_no)}`);
   if (v.plaka_no) meta.push(`🚗 ${esc(v.plaka_no)}`);
   if (v.hiz) meta.push(`⚡ ${esc(v.hiz)}`);
   if (v.trafik?.label) meta.push(`🚦 ${esc(v.trafik.label)}`);
@@ -780,9 +821,9 @@ function vehicleCard(v) {
   return `
     <div class="vehicle ${cls}">
       <div class="v-main">
-        <div class="v-title">${esc(v.arac_no || "Araç")}</div>
-        <div class="v-sub">${meta.join(" · ")}</div>
+        <div class="v-title">${esc(lineNo)}</div>
         ${v.hat_ad ? `<div class="v-sub" style="color:#93c5fd">🚌 ${esc(v.hat_ad)}</div>` : ""}
+        <div class="v-sub">${meta.join(" · ")}</div>
       </div>
       <div class="v-eta">
         ${statusPill}

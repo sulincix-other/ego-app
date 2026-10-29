@@ -6,6 +6,19 @@
   "description": "EGO Cepte — Ankara otobüs takip uygulaması (Bun tabanlı, web + mobil uyumlu)",
   "scripts": {
     "start": "bun run server.js",
-    "dev": "bun --watch server.js"
+    "dev": "bun --watch server.js",
+    "apk": "bun run scripts/build-apk.js",
+    "clean": "bun run scripts/clean.js",
+    "android:sync": "bunx cap sync android",
+    "android:icons": "bunx capacitor-assets generate --android",
+    "android:open": "bunx cap open android"
+  },
+  "dependencies": {
+    "@capacitor/android": "7.6.10",
+    "@capacitor/core": "7.6.10"
+  },
+  "devDependencies": {
+    "@capacitor/assets": "3",
+    "@capacitor/cli": "7.6.10"
   }
 }
