@@ -1,22 +1,11 @@
 {
-  "name": "ego-bus-tracker",
+  "name": "ego-cepte",
   "version": "1.0.0",
-  "description": "EGO Otobüs Takip - Ankara Büyükşehir Belediyesi EGO Genel Müdürlüğü otobüs takip uygulaması",
-  "main": "server.go",
+  "private": true,
+  "type": "module",
+  "description": "EGO Cepte — Ankara otobüs takip uygulaması (Bun tabanlı, web + mobil uyumlu)",
   "scripts": {
-    "start": "go run server.go",
-    "dev": "go run server.go",
-    "build": "go build -o ego-bus-tracker .",
-    "test": "go test ./..."
-  },
-  "keywords": [
-    "ego",
-    "bus",
-    "transport",
-    "ankara",
-    "tracking",
-    "golang"
-  ],
-  "author": "",
-  "license": "MIT"
+    "start": "bun run server.js",
+    "dev": "bun --watch server.js"
+  }
 }

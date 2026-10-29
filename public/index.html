@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0a0f1c" />
+  <meta name="description" content="Ankara EGO otobüs takip: canlı araç konumları, varış süreleri, durak ve hat arama, duyurular." />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="EGO Cepte" />
+  <title>EGO Cepte — Ankara Otobüs Takip</title>
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <div class="logo" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 17h16" />
+            <path d="M5 17V7a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v10" />
+            <path d="M5 11h14" />
+            <circle cx="8" cy="17" r="1.6" />
+            <circle cx="16" cy="17" r="1.6" />
+          </svg>
+        </div>
+        <div class="brand-text">
+          <h1>EGO Cepte</h1>
+          <p>Ankara Otobüs Takip</p>
+        </div>
+      </div>
+      <button class="icon-btn" id="refresh-btn" title="Yenile" aria-label="Yenile">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+          <path d="M21 3v6h-6" />
+        </svg>
+      </button>
+    </header>
+
+    <main class="main">
+      <!-- ================= ANA SAYFA ================= -->
+      <section class="view active" data-view="home">
+        <div class="hero">
+          <div class="hero-glow"></div>
+          <div class="hero-body">
+            <h2>Yakınındaki duraklar</h2>
+            <p>Konumunu kullanarak 500 metre içindeki durakları ve canlı varışları gör.</p>
+            <button class="btn primary" id="nearby-btn">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 21s7-6.5 7-11a7 7 0 1 0-14 0c0 4.5 7 11 7 11Z" />
+                <circle cx="12" cy="10" r="2.5" />
+              </svg>
+              Konumumu kullan
+            </button>
+          </div>
+        </div>
+
+        <div id="home-nearby" class="stack"></div>
+
+        <div class="section-head">
+          <h3>Son duyurular</h3>
+          <button class="link-btn" data-nav="news">Tümü</button>
+        </div>
+        <div id="home-news" class="stack">
+          <div class="skeleton"></div>
+          <div class="skeleton"></div>
+        </div>
+
+        <div class="section-head">
+          <h3>Sistem durumu</h3>
+        </div>
+        <div id="home-status" class="status-grid">
+          <div class="status-card"><span class="dot ok"></span> Bağlantı kontrol ediliyor…</div>
+        </div>
+      </section>
+
+      <!-- ================= DURAK ARAMA ================= -->
+      <section class="view" data-view="stops">
+        <div class="view-head">
+          <h2>Durak ara</h2>
+          <p class="muted">Durak kodu veya adı ile arayın.</p>
+        </div>
+        <div class="searchbar">
+          <svg class="search-ico" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" />
+          </svg>
+          <input id="stop-input" type="search" inputmode="search" placeholder="örn. 10560 veya Kızılay" autocomplete="off" />
+          <button class="btn primary" id="stop-search-btn">Ara</button>
+        </div>
+        <div id="stop-results" class="stack">
+          <div class="empty">
+            <div class="empty-ico">🚏</div>
+            <p>Durak kodu ya da adı girerek aramaya başla.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= HATLAR ================= -->
+      <section class="view" data-view="lines">
+        <div class="view-head">
+          <h2>Hatlar</h2>
+          <p class="muted">Hat kodu veya adı ile filtreleyin.</p>
+        </div>
+        <div class="searchbar">
+          <svg class="search-ico" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" />
+          </svg>
+          <input id="line-input" type="search" inputmode="search" placeholder="örn. 174 veya Beytepe" autocomplete="off" />
+        </div>
+        <div class="chip-row" id="line-chips"></div>
+        <div id="line-results" class="stack">
+          <div class="skeleton"></div>
+          <div class="skeleton"></div>
+          <div class="skeleton"></div>
+        </div>
+      </section>
+
+      <!-- ================= DUYURULAR ================= -->
+      <section class="view" data-view="news">
+        <div class="view-head row">
+          <div>
+            <h2>Duyurular</h2>
+            <p class="muted">EGO Genel Müdürlüğü duyuruları.</p>
+          </div>
+          <button class="btn ghost sm" id="news-refresh">Yenile</button>
+        </div>
+        <div id="news-list" class="stack">
+          <div class="skeleton"></div>
+          <div class="skeleton"></div>
+        </div>
+      </section>
+
+      <!-- ================= AYARLAR ================= -->
+      <section class="view" data-view="settings">
+        <div class="view-head">
+          <h2>Ayarlar &amp; araçlar</h2>
+          <p class="muted">Uygulama yapılandırması ve ek servisler.</p>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><h3>Uygulama yapılandırması</h3><span class="badge" id="config-source">/api/config</span></div>
+          <div id="config-card" class="kv-list">
+            <div class="skeleton"></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><h3>SSL pinleri</h3><span class="badge" id="pins-source">/api/config/ssl-pins</span></div>
+          <div id="pins-card" class="kv-list">
+            <div class="skeleton"></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><h3>Adres ara</h3><span class="badge">Geocoding</span></div>
+          <div class="searchbar compact">
+            <input id="geo-input" type="search" placeholder="örn. Kızılay, Çankaya" autocomplete="off" />
+            <button class="btn primary sm" id="geo-btn">Ara</button>
+          </div>
+          <div id="geo-results" class="stack tight"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><h3>Rota servisi</h3><span class="badge">/v1/route/compute</span></div>
+          <p class="muted small">Rota hesaplama servisini önceden ısıtır (prewarm).</p>
+          <button class="btn ghost sm" id="prewarm-btn">Prewarm çalıştır</button>
+          <div id="prewarm-result" class="muted small"></div>
+        </div>
+
+        <div class="card about">
+          <div class="card-head"><h3>Hakkında</h3></div>
+          <p class="muted small">
+            EGO Cepte, EGO Genel Müdürlüğü'nün herkese açık servislerini kullanan bir istemcidir.
+            Resmî bir uygulama değildir. Veriler bilgilendirme amaçlıdır.
+          </p>
+        </div>
+      </section>
+
+      <!-- ================= DURAK DETAY ================= -->
+      <section class="view" data-view="stop-detail">
+        <button class="back-btn" id="stop-back">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="m15 18-6-6 6-6" />
+          </svg>
+          Geri
+        </button>
+        <div id="stop-detail-body"></div>
+      </section>
+
+      <!-- ================= HAT DETAY ================= -->
+      <section class="view" data-view="line-detail">
+        <button class="back-btn" id="line-back">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="m15 18-6-6 6-6" />
+          </svg>
+          Geri
+        </button>
+        <div id="line-detail-body"></div>
+      </section>
+    </main>
+
+    <nav class="tabbar" aria-label="Ana gezinme">
+      <button data-nav="home" class="active">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="m3 11 9-8 9 8" /><path d="M5 10v10h14V10" /></svg>
+        <span>Ana</span>
+      </button>
+      <button data-nav="stops">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
+        <span>Durak</span>
+      </button>
+      <button data-nav="lines">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17h16" /><path d="M5 17V7a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v10" /><path d="M5 11h14" /><circle cx="8" cy="17" r="1.6" /><circle cx="16" cy="17" r="1.6" /></svg>
+        <span>Hatlar</span>
+      </button>
+      <button data-nav="news">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h13v14H6a2 2 0 0 1-2-2Z" /><path d="M17 9h3v8a2 2 0 0 1-2 2h-1" /><path d="M7 9h7M7 13h7" /></svg>
+        <span>Duyuru</span>
+      </button>
+      <button data-nav="settings">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1.1-1.55 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.55-1H3a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.55-1.1 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34H9a1.7 1.7 0 0 0 1-1.55V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87V9a1.7 1.7 0 0 0 1.55 1H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.55 1Z" /></svg>
+        <span>Ayarlar</span>
+      </button>
+    </nav>
+  </div>
+
+  <div id="toast-root" class="toast-root" aria-live="polite"></div>
+
+  <script type="module" src="/app.js"></script>
+</body>
+</html>
