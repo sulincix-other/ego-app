@@ -5,6 +5,7 @@ node_modules/
 
 # Derleme çıktıları
 dist/
+**/build/
 
 # Android imza dosyaları (asla commit'lenmemeli)
 *.jks

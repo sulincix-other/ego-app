@@ -114,16 +114,22 @@ bun run android:open
 
 ### İmzalı release APK
 
+Öncelikle imza anahtarını oluşturun:
+
 ```bash
 keytool -genkeypair -v -keystore ego-cepte.jks -alias ego \
   -keyalg RSA -keysize 2048 -validity 10000
+```
 
-export EGO_KEYSTORE_FILE="$PWD/ego-cepte.jks"
-export EGO_KEYSTORE_PASSWORD="parola"
-export EGO_KEY_ALIAS="ego"
-export EGO_KEY_PASSWORD="parola"
+Sonra ortam değişkenlerini ayarlayıp imzalayın:
 
-bun run apk --release
+```bash
+export EGO_ANDROID_KEYSTORE="$PWD/ego-cepte.jks"
+export EGO_ANDROID_KEY_ALIAS="ego"
+export EGO_ANDROID_KEY_PASSWORD="parola"
+export EGO_ANDROID_STORE_PASSWORD="parola"
+
+bun run sign-apk
 ```
 
 > `*.jks` ve `*.keystore` dosyaları `.gitignore` içindedir. Anahtar dosyasını ve

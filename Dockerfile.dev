@@ -1,0 +1,28 @@
+# EGO Cepte - Development Docker image
+# Hot-reload desteğiyle geliştirme ortamı
+
+FROM bun:1.1.30-alpine
+
+# Kurulum ayarları
+LABEL maintainer="EGO Cepte Team"
+LABEL description="EGO Cepte - Development environment"
+
+# Çalışma dizini
+WORKDIR /app
+
+# Bun cache'ini optimize et
+RUN apk add --no-cache \
+    && mkdir -p /app/node_modules/.cache/bun
+
+# Tüm bağımlılıkları kur (development dahil)
+COPY package.json bun.lockb* ./
+RUN bun install --frozen-lockfile
+
+# Uygulama kodunu kopyala
+COPY . .
+
+# Sunucu portunu açıkla
+EXPOSE 3000
+
+# Geliştirme modunda başlat (watch modu)
+CMD ["bun", "--watch", "server.js"]

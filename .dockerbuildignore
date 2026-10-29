@@ -1,0 +1,29 @@
+# node_modules/.cache (Bun cache'i zaten Dockerfile'da optimize edilmiş)
+node_modules/.cache/
+
+# Derleme çıktıları
+dist/
+**/build/
+
+# Android çıktıları
+android/build/
+android/app/build/
+*.apk
+*.jks
+*.keystore
+
+# IDE ve editor dosyaları
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Test ve log dosyaları
+*.log
+coverage/
+
+# Geçici dosyalar
+*.tmp
+*.temp
+temp/

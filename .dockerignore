@@ -1,0 +1,38 @@
+# Git
+.git
+.gitignore
+
+# Docker
+docker-compose*.yml
+Dockerfile*
+.dockerignore
+
+# Derleme çıktıları
+dist/
+**/build/
+*.apk
+*.jks
+*.keystore
+
+# IDE ve editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Node modülü cache
+node_modules/.cache/
+
+# Test ve log dosyaları
+*.log
+coverage/
+
+# Android
+android/build/
+android/app/build/
+
+# Geçici dosyalar
+*.tmp
+*.temp
+temp/
