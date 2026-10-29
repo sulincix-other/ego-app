@@ -24,7 +24,7 @@
     },
     {
       "url": "http://localhost:8080",
-      "description": "Yerel CORS proxy (server.js)"
+      "description": "Yerel CORS proxy (server.go)"
     }
   ],
   "tags": [

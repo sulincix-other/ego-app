@@ -14,8 +14,12 @@ const state = {
     currentStop: null,
     liveData: null,
     liveInterval: null,
+    liveRefreshing: false,
     stopCode: ''
 };
+
+// Exposed for debugging; see the "Debug Modu" section in README.md.
+window.state = state;
 
 // DOM Elements
 const elements = {
@@ -64,32 +68,19 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // Tab Navigation
-function initTabs() {
-    elements.tabs.forEach(tab => {
-        tab.addEventListener('click', () => {
-            const target = tab.dataset.tab;
-            
-            // Update active tab
-            elements.tabs.forEach(t => t.classList.remove('active'));
-            tab.classList.add('active');
-            
-            // Update active content
-            elements.tabContents.forEach(content => {
-                content.classList.remove('active');
-                content.classList.add('hidden');
-                if (content.id === target) {
-                    content.classList.add('active');
-                    content.classList.remove('hidden');
-                }
-            });
-        });
-    });
+function stopLivePolling() {
+    if (state.liveInterval) {
+        clearInterval(state.liveInterval);
+        state.liveInterval = null;
+    }
 }
 
-// Switch to tab from home menu
 function switchToTab(tabId) {
     // Ana sayfa menüsünü gizle
     document.getElementById('home').classList.add('hidden');
+
+    // Stop polling when the user leaves the live tab.
+    if (tabId !== 'live') stopLivePolling();
 
     // Set tab button as active
     const tabBtn = document.querySelector(`[data-tab="${tabId}"]`);
@@ -133,10 +124,7 @@ function showHome() {
     });
     
     // Clear live tracking
-    if (state.liveInterval) {
-        clearInterval(state.liveInterval);
-        state.liveInterval = null;
-    }
+    stopLivePolling();
     elements.liveResults.classList.add('hidden');
     elements.liveList.innerHTML = '';
 }
@@ -157,7 +145,7 @@ function initEventListeners() {
 
     // Live tracking
     elements.trackBtn.addEventListener('click', startLiveTracking);
-    elements.refreshLive.addEventListener('click', refreshLive); // DÜZELTME: stopLiveTracking yerine refreshLive tetikleniyor
+    elements.refreshLive.addEventListener('click', refreshLive);
 
     // Geo search
     elements.geoSearch.addEventListener('keypress', (e) => {
@@ -168,6 +156,46 @@ function initEventListeners() {
     // Live tracking: Enter ile de başlat
     elements.stopCode.addEventListener('keypress', (e) => {
         if (e.key === 'Enter') startLiveTracking();
+    });
+
+    // Delegated handlers for dynamically rendered cards. Inline onclick handlers are
+    // avoided because upstream values may contain quotes or HTML.
+    elements.linesResults.addEventListener('click', (event) => {
+        const card = event.target.closest('[data-line-code]');
+        if (card) showLineDetailsInModal(card.dataset.lineCode);
+    });
+
+    elements.stopsResults.addEventListener('click', (event) => {
+        const card = event.target.closest('[data-stop-code]');
+        if (card) loadStopDetails(card.dataset.stopCode);
+    });
+
+    elements.geoResults.addEventListener('click', (event) => {
+        const card = event.target.closest('[data-geo-lat]');
+        if (card) showNearbyStops(card.dataset.geoLat, card.dataset.geoLng, card.dataset.geoName || '');
+    });
+
+    elements.modalBody.addEventListener('click', (event) => {
+        const trigger = event.target.closest('[data-action]');
+        if (!trigger) return;
+
+        switch (trigger.dataset.action) {
+            case 'line-tracking':
+                openLineTracking(trigger.dataset.lineCode);
+                closeModal();
+                break;
+            case 'live-stop':
+                openLiveTab(trigger.dataset.stopCode);
+                closeModal();
+                break;
+            case 'stop-details':
+                loadStopDetails(trigger.dataset.stopCode);
+                break;
+            case 'home':
+                showHome();
+                closeModal();
+                break;
+        }
     });
 
     // Modal
@@ -181,7 +209,7 @@ function initEventListeners() {
 }
 
 // API Helper
-async function apiRequest(endpoint, params = {}) {
+async function apiRequest(endpoint, params = {}, options = {}) {
     const queryParams = new URLSearchParams(params).toString();
     const url = `${API_BASE}/proxy?path=${encodeURIComponent(endpoint)}${queryParams ? '&' + queryParams : ''}`;
 
@@ -189,9 +217,11 @@ async function apiRequest(endpoint, params = {}) {
     try {
         response = await fetch(url, {
             method: 'GET',
-            headers: { 'Accept': 'application/json' }
+            headers: { 'Accept': 'application/json' },
+            signal: options.signal
         });
     } catch (error) {
+        if (isAbortError(error)) throw error;
         console.error('API Error:', error);
         throw new Error('Sunucuya ulaşılamadı. Bağlantınızı kontrol edin.');
     }
@@ -217,8 +247,8 @@ async function apiRequest(endpoint, params = {}) {
 
 // API Endpoints
 const API_ENDPOINTS = {
-    hatlar: '/hibrit/action.asp',
-    hatBilgileri: '/hibrit/action.asp',
+    hatlar: '/hibrit/act.asp',
+    hatBilgileri: '/hibrit/act.asp',
     duraklar: '/hibrit/action.asp',
     duraktanGecenHatlar: '/hibrit/action.asp',
     duraktanGecisSaatleri: '/hibrit/action.asp',
@@ -229,25 +259,43 @@ const API_ENDPOINTS = {
 
 // Global lines cache for local filtering
 let allLines = [];
+let linesPromise = null;
+let stopsController = null;
+let stopsRequestSeq = 0;
+let geoController = null;
+let geoRequestSeq = 0;
 
 // Load Lines
+async function fetchLines() {
+    if (allLines.length > 0) return allLines;
+    if (!linesPromise) {
+        linesPromise = apiRequest(API_ENDPOINTS.hatlar, { FNC: 'Hatlar', LAN: 'tr' })
+            .then(data => {
+                allLines = data.table || [];
+                state.lines = allLines;
+                return allLines;
+            })
+            .finally(() => {
+                linesPromise = null;
+            });
+    }
+    return linesPromise;
+}
+
 async function loadLines(query = '') {
     try {
         showLoading(elements.linesLoading);
         elements.linesResults.innerHTML = '';
 
-        const data = await apiRequest(API_ENDPOINTS.hatlar, { FNC: 'Hatlar', LAN: 'tr' });
+        const lines = await fetchLines();
 
-        allLines = data.table || [];
-        
         if (query && query.trim()) {
-            const filtered = filterLines(query.trim());
-            renderLines(filtered);
+            renderLines(filterLines(query.trim()));
         } else {
-            renderLines(allLines);
+            renderLines(lines);
         }
     } catch (error) {
-        elements.linesResults.innerHTML = `<p class="error-message">Hata: ${error.message}</p>`;
+        elements.linesResults.innerHTML = `<p class="error-message">Hata: ${escapeHtml(error.message)}</p>`;
     } finally {
         hideLoading(elements.linesLoading);
     }
@@ -264,7 +312,11 @@ function filterLines(query) {
 }
 
 // Search lines from cache (no API request)
-function searchLines(query) {
+async function searchLines(query) {
+    if (!allLines.length) {
+        await loadLines(query);
+        return;
+    }
     if (!query.trim()) {
         renderLines(allLines);
         return;
@@ -287,12 +339,12 @@ function renderLines(lines) {
     }
 
     elements.linesResults.innerHTML = lines.map(line => `
-        <div class="result-card" onclick="showLineDetailsInModal('${line.kod}');">
-            <h4>${line.ad}</h4>
-            <p><strong>Kod:</strong> ${line.kod}</p>
-            <p><strong>Süre:</strong> ${line.sure} dk</p>
-            <p><strong>Mesafe:</strong> ${line.mesafe} km</p>
-            <div class="meta">${line.detay || ''}</div>
+        <div class="result-card" data-line-code="${escapeHtml(line.kod)}">
+            <h4>${escapeHtml(line.ad)}</h4>
+            <p><strong>Kod:</strong> ${escapeHtml(line.kod)}</p>
+            <p><strong>Süre:</strong> ${escapeHtml(line.sure)} dk</p>
+            <p><strong>Mesafe:</strong> ${escapeHtml(line.mesafe)} km</p>
+            <div class="meta">${escapeHtml(line.detay || '')}</div>
         </div>
     `).join('');
 }
@@ -304,6 +356,10 @@ async function loadStops(query = '') {
         return;
     }
 
+    const requestId = ++stopsRequestSeq;
+    if (stopsController) stopsController.abort();
+    stopsController = new AbortController();
+
     try {
         showLoading(elements.stopsLoading);
         elements.stopsResults.innerHTML = '';
@@ -312,7 +368,9 @@ async function loadStops(query = '') {
             FNC: 'Duraklar',
             QUERY: query,
             LAN: 'tr'
-        });
+        }, { signal: stopsController.signal });
+
+        if (requestId !== stopsRequestSeq) return;
 
         if (data.table && data.table.length > 0) {
             state.stops = data.table;
@@ -321,9 +379,10 @@ async function loadStops(query = '') {
             elements.stopsResults.innerHTML = '<p class="empty-message">Duraklar yüklenemedi</p>';
         }
     } catch (error) {
-        elements.stopsResults.innerHTML = `<p class="error-message">Hata: ${error.message}</p>`;
+        if (isAbortError(error) || requestId !== stopsRequestSeq) return;
+        elements.stopsResults.innerHTML = `<p class="error-message">Hata: ${escapeHtml(error.message)}</p>`;
     } finally {
-        hideLoading(elements.stopsLoading);
+        if (requestId === stopsRequestSeq) hideLoading(elements.stopsLoading);
     }
 }
 
@@ -344,79 +403,16 @@ function renderStops(stops) {
     }
 
     elements.stopsResults.innerHTML = stops.map(stop => `
-        <div class="result-card" onclick="loadStopDetails('${stop.kod}')">
-            <h4>${stop.ad}</h4>
-            <p><strong>Kod:</strong> ${stop.kod}</p>
-            <p><strong>Konum:</strong> ${stop.konum}</p>
-            <div class="meta">Lat: ${stop.lat}, Lng: ${stop.lng}</div>
+        <div class="result-card" data-stop-code="${escapeHtml(stop.kod)}">
+            <h4>${escapeHtml(stop.ad)}</h4>
+            <p><strong>Kod:</strong> ${escapeHtml(stop.kod)}</p>
+            <p><strong>Konum:</strong> ${escapeHtml(stop.konum)}</p>
+            <div class="meta">Lat: ${escapeHtml(stop.lat)}, Lng: ${escapeHtml(stop.lng)}</div>
         </div>
     `).join('');
 }
 
-// Show Stop Modal
-function showStopModal(stopCode) {
-    loadStopDetails(stopCode);
-}
-
 // Show Line Details Modal
-async function showLineDetails(lineCode) {
-    try {
-        const data = await apiRequest(API_ENDPOINTS.hatBilgileri, {
-            FNC: 'HatBilgileri',
-            KOD: lineCode,
-            YOL: 'TRUE',
-            LAN: 'tr'
-        });
-
-        if (data.table_durak && data.table_durak.length > 0) {
-            const stops = data.table_durak;
-            const lineName = allLines.find(l => l.kod === lineCode)?.ad || lineCode;
-            
-            elements.modalTitle.textContent = `🛤️ Hat: ${lineCode} - ${lineName}`;
-            elements.modalBody.innerHTML = `
-                <div class="modal-header">
-                    <h3>🛤️ Hat Bilgileri</h3>
-                    <p>Toplam ${stops.length} durak</p>
-                </div>
-                
-                <h3 class="modal-section-title">📍 Bu Hattın Durakları:</h3>
-                <div class="modal-scroll">
-                    ${stops.map((stop, index) => `
-                        <div class="stop-card">
-                            <div class="stop-info">
-                                <div class="stop-name">${stop.ad}</div>
-                                <div class="stop-code">📍 Durak Kodu: ${stop.kod}</div>
-                                ${stop.konum ? `<div class="stop-location">${stop.konum}</div>` : ''}
-                            </div>
-                            <div class="stop-number">${index + 1}</div>
-                        </div>
-                    `).join('')}
-                </div>
-                
-                <div class="modal-actions">
-                    <button class="btn-primary" onclick="openLineTracking('${lineCode}'); closeModal();">
-                        🚌 Bu Hattı Canlı Takip Et
-                    </button>
-                    <button class="btn-secondary" onclick="showHome(); closeModal();">
-                        🏠 Ana Sayfaya Dön
-                    </button>
-                </div>
-            `;
-            
-            elements.modal.classList.remove('hidden');
-        } else {
-            elements.modalTitle.textContent = 'Hat Bulunamadı';
-            elements.modalBody.innerHTML = '<p class="empty-message">Bu koda ait hat bulunamadı.</p>';
-            elements.modal.classList.remove('hidden');
-        }
-    } catch (error) {
-        elements.modalTitle.textContent = 'Hata';
-        elements.modalBody.innerHTML = `<p class="error-message">Hata: ${error.message}</p>`;
-        elements.modal.classList.remove('hidden');
-    }
-}
-
-// Show Line Details in Stop Modal
 async function showLineDetailsInModal(lineCode) {
     try {
         const data = await apiRequest(API_ENDPOINTS.hatBilgileri, {
@@ -442,9 +438,9 @@ async function showLineDetailsInModal(lineCode) {
                     ${stops.map((stop, index) => `
                         <div class="stop-card">
                             <div class="stop-info">
-                                <div class="stop-name">${stop.ad}</div>
-                                <div class="stop-code">📍 Durak Kodu: ${stop.kod}</div>
-                                ${stop.konum ? `<div class="stop-location">${stop.konum}</div>` : ''}
+                                <div class="stop-name">${escapeHtml(stop.ad)}</div>
+                                <div class="stop-code">📍 Durak Kodu: ${escapeHtml(stop.kod)}</div>
+                                ${stop.konum ? `<div class="stop-location">${escapeHtml(stop.konum)}</div>` : ''}
                             </div>
                             <div class="stop-number">${index + 1}</div>
                         </div>
@@ -452,10 +448,10 @@ async function showLineDetailsInModal(lineCode) {
                 </div>
                 
                 <div class="modal-actions">
-                    <button class="btn-primary" onclick="openLineTracking('${lineCode}'); closeModal();">
+                    <button class="btn-primary" data-action="line-tracking" data-line-code="${escapeHtml(lineCode)}">
                         🚌 Bu Hattı Canlı Takip Et
                     </button>
-                    <button class="btn-secondary" onclick="showHome(); closeModal();">
+                    <button class="btn-secondary" data-action="home">
                         🏠 Ana Sayfaya Dön
                     </button>
                 </div>
@@ -469,17 +465,9 @@ async function showLineDetailsInModal(lineCode) {
         }
     } catch (error) {
         elements.modalTitle.textContent = 'Hata';
-        elements.modalBody.innerHTML = `<p class="error-message">Hata: ${error.message}</p>`;
+        elements.modalBody.innerHTML = `<p class="error-message">Hata: ${escapeHtml(error.message)}</p>`;
         elements.modal.classList.remove('hidden');
     }
-}
-
-function switchToStopsTab() {
-    switchToTab('stops');
-}
-
-function switchToLiveTab(stopCode) {
-    switchToTab('live');
 }
 
 function openLiveTracking(stopCode) {
@@ -497,6 +485,7 @@ function openLiveTab(stopCode) {
 // Hat modalından canlı takibe geç: hat kodunu doldur, durak kodunu kullanıcıya bırak.
 function openLineTracking(lineCode) {
     switchToTab('live');
+    stopLivePolling();
     elements.stopCode.value = '';
     elements.lineCode.value = lineCode;
     state.stopCode = '';
@@ -535,11 +524,11 @@ async function loadStopDetails(stopCode) {
                     <h3 class="section-title">🚦 Bu duraktan geçen hatlar:</h3>
                     ${sortedDurations.map(duration => `
                         <div class="stop-duration-group">
-                            <h4 class="duration-heading">⏱️ ${duration} dakikada</h4>
+                            <h4 class="duration-heading">⏱️ ${escapeHtml(duration)} dakikada</h4>
                             ${byDuration[duration].map(line => `
                                 <div class="stop-detail-row">
-                                    <strong>${line.ad}</strong>
-                                    <span class="detail-code">${line.kod}</span>
+                                    <strong>${escapeHtml(line.ad)}</strong>
+                                    <span class="detail-code">${escapeHtml(line.kod)}</span>
                                 </div>
                             `).join('')}
                         </div>
@@ -547,10 +536,10 @@ async function loadStopDetails(stopCode) {
                     
                     <h3 class="section-title">🚌 Canlı Takip</h3>
                     <div class="action-container">
-                        <button class="btn-primary" onclick="openLiveTab('${stopCode}'); closeModal();">
+                        <button class="btn-primary" data-action="live-stop" data-stop-code="${escapeHtml(stopCode)}">
                             Yaklaşan Otobüsleri Görüntüle
                         </button>
-                        <button class="btn-secondary" onclick="showHome(); closeModal();">
+                        <button class="btn-secondary" data-action="home">
                             🏠 Ana Sayfaya Dön
                         </button>
                     </div>
@@ -565,7 +554,7 @@ async function loadStopDetails(stopCode) {
         }
     } catch (error) {
         elements.modalTitle.textContent = 'Hata';
-        elements.modalBody.innerHTML = `<p class="error-message">Hata: ${error.message}</p>`;
+        elements.modalBody.innerHTML = `<p class="error-message">Hata: ${escapeHtml(error.message)}</p>`;
         elements.modal.classList.remove('hidden');
     }
 }
@@ -586,6 +575,10 @@ async function startLiveTracking() {
 
     state.stopCode = stopCode;
 
+    // Avoid overlapping polls when starting a new track.
+    stopLivePolling();
+    state.liveRefreshing = false;
+
     // Kullanıcıya yükleme geri bildirimi ver.
     elements.liveResults.classList.remove('hidden');
     elements.liveList.innerHTML = '<div class="loading">Otobüsler aranıyor...</div>';
@@ -605,7 +598,6 @@ async function startLiveTracking() {
             renderLiveList(data.table);
             elements.liveResults.classList.remove('hidden');
             
-            if (state.liveInterval) clearInterval(state.liveInterval);
             state.liveInterval = setInterval(refreshLive, 30000);
         } else {
             elements.liveResults.classList.remove('hidden');
@@ -618,16 +610,19 @@ async function startLiveTracking() {
             `;
         }
     } catch (error) {
-        elements.liveList.innerHTML = `<p class="error-message">Hata: ${error.message}</p>`;
+        elements.liveList.innerHTML = `<p class="error-message">Hata: ${escapeHtml(error.message)}</p>`;
     }
 }
 
 async function refreshLive() {
+    if (state.liveRefreshing) return;
+
     const stopCode = elements.stopCode.value.trim() || state.stopCode;
     const lineCode = elements.lineCode.value.trim();
 
     if (!stopCode) return;
 
+    state.liveRefreshing = true;
     try {
         const params = {
             FNC: lineCode ? 'Otobus' : 'Otobusler',
@@ -652,18 +647,9 @@ async function refreshLive() {
         }
     } catch (error) {
         console.error('Refresh error:', error);
+    } finally {
+        state.liveRefreshing = false;
     }
-}
-
-function stopLiveTracking() {
-    if (state.liveInterval) {
-        clearInterval(state.liveInterval);
-        state.liveInterval = null;
-    }
-    state.stopCode = '';
-    elements.liveResults.classList.add('hidden');
-    elements.liveList.innerHTML = '';
-    showHome();
 }
 
 // Render Live List
@@ -738,7 +724,7 @@ function renderLiveList(items) {
                 <div class="time-header">
                     <div class="icon">⏱️</div>
                     <div class="time-info">
-                        <div class="time-text">${time} dakika içinde</div>
+                        <div class="time-text">${escapeHtml(time)} dakika içinde</div>
                         <div class="urgency-text">${urgencyText} • ${vehiclesAtTime.length} otobüs</div>
                     </div>
                     <div class="count-badge">${vehiclesAtTime.length}</div>
@@ -751,28 +737,28 @@ function renderLiveList(items) {
                         
                         let badges = '';
                         if (busNo !== '-') {
-                            badges += `<span class="badge badge-bus">🚌 ${busCode}</span>`;
+                            badges += `<span class="badge badge-bus">🚌 ${escapeHtml(busCode)}</span>`;
                         }
                         if (plakaNo) {
-                            badges += `<span class="badge badge-plate">🚗 ${plakaNo}</span>`;
+                            badges += `<span class="badge badge-plate">🚗 ${escapeHtml(plakaNo)}</span>`;
                         }
                         if (vehicle.trafik?.trafficLevel) {
                             const level = vehicle.trafik.trafficLevel;
                             const heavy = ['yogun', 'az_yogun', 'cok_yogun', 'çok_yoğun'].includes(level);
                             const trafficClass = heavy ? 'traffic-heavy' : 'traffic-normal';
-                            badges += `<span class="badge ${trafficClass}">🚦 ${vehicle.trafik.label || level}</span>`;
+                            badges += `<span class="badge ${trafficClass}">🚦 ${escapeHtml(vehicle.trafik.label || level)}</span>`;
                         }
 
                         return `
                             <div class="vehicle-item">
                                 <div class="vehicle-main">
                                     <div class="badges-row">${badges || '<span class="text-muted">🚌 Otobüs</span>'}</div>
-                                    ${busCode !== '-' ? `<div class="info-line">🛤️ Otobüs: ${busNo}</div>` : ''}
-                                    ${vehicle.hiz ? `<div class="info-line text-success">⚡ Hız: ${vehicle.hiz} km/s</div>` : ''}
+                                    ${busCode !== '-' ? `<div class="info-line">🛤️ Otobüs: ${escapeHtml(busNo)}</div>` : ''}
+                                    ${vehicle.hiz ? `<div class="info-line text-success">⚡ Hız: ${escapeHtml(vehicle.hiz)} km/s</div>` : ''}
                                 </div>
                                 <div class="vehicle-meta">
-                                    ${vehicle.detay ? `<div class="detail-text">${vehicle.detay}</div>` : ''}
-                                    ${vehicle.trafik?.avgDelayText ? `<div class="delay-text">🕐 ${vehicle.trafik.avgDelayText} dk gecikme</div>` : ''}
+                                    ${vehicle.detay ? `<div class="detail-text">${escapeHtml(vehicle.detay)}</div>` : ''}
+                                    ${vehicle.trafik?.avgDelayText ? `<div class="delay-text">🕐 ${escapeHtml(vehicle.trafik.avgDelayText)} dk gecikme</div>` : ''}
                                 </div>
                             </div>
                         `;
@@ -792,21 +778,29 @@ async function searchGeo(query) {
         return;
     }
 
+    const requestId = ++geoRequestSeq;
+    if (geoController) geoController.abort();
+    geoController = new AbortController();
+
     try {
         showLoading(elements.geoLoading);
         elements.geoResults.innerHTML = '';
 
         const params = new URLSearchParams({ q: query, limit: 10 });
         const response = await fetch(`${API_BASE}/api/geocode?${params.toString()}`, {
-            headers: { 'Accept': 'application/json' }
+            headers: { 'Accept': 'application/json' },
+            signal: geoController.signal
         });
 
         let data;
         try {
             data = await response.json();
         } catch (error) {
+            if (isAbortError(error)) throw error;
             throw new Error(`Geçersiz yanıt alındı (HTTP ${response.status}).`);
         }
+
+        if (requestId !== geoRequestSeq) return;
 
         if (!response.ok) {
             throw new Error(data.error || `İstek başarısız oldu (HTTP ${response.status}).`);
@@ -818,9 +812,10 @@ async function searchGeo(query) {
             elements.geoResults.innerHTML = '<p class="empty-message">Sonuç bulunamadı</p>';
         }
     } catch (error) {
-        elements.geoResults.innerHTML = `<p class="error-message">Hata: ${error.message}</p>`;
+        if (isAbortError(error) || requestId !== geoRequestSeq) return;
+        elements.geoResults.innerHTML = `<p class="error-message">Hata: ${escapeHtml(error.message)}</p>`;
     } finally {
-        hideLoading(elements.geoLoading);
+        if (requestId === geoRequestSeq) hideLoading(elements.geoLoading);
     }
 }
 
@@ -830,17 +825,20 @@ function renderGeoResults(features) {
         const coords = (feature.geometry && feature.geometry.coordinates) || [];
         if (coords.length < 2) return '';
 
+        const lat = Number(coords[1]);
+        const lng = Number(coords[0]);
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) return '';
+
         const name = props.name || 'Bilinmeyen Yer';
         return `
             <div class="result-card"
-                 data-lat="${coords[1]}" data-lng="${coords[0]}" data-name="${escapeHtml(name)}"
-                 onclick="showNearbyStops(this.dataset.lat, this.dataset.lng, this.dataset.name)">
+                 data-geo-lat="${lat}" data-geo-lng="${lng}" data-geo-name="${escapeHtml(name)}">
                 <h4>${escapeHtml(name)}</h4>
                 <p><strong>Tür:</strong> ${escapeHtml(props.osm_value || 'Diğer')}</p>
                 ${props.city ? `<p><strong>Şehir:</strong> ${escapeHtml(props.city)}</p>` : ''}
                 ${props.state ? `<p><strong>İl:</strong> ${escapeHtml(props.state)}</p>` : ''}
                 <div class="meta">
-                    📍 ${coords[0]}, ${coords[1]}
+                    📍 ${lat}, ${lng}
                 </div>
             </div>
         `;
@@ -875,7 +873,7 @@ async function showNearbyStops(lat, lng, name = '') {
             </div>
             <div class="modal-scroll">
                 ${stops.map(stop => `
-                    <div class="stop-card clickable" onclick="loadStopDetails('${escapeHtml(stop.kod)}')">
+                    <div class="stop-card clickable" data-action="stop-details" data-stop-code="${escapeHtml(stop.kod)}">
                         <div class="stop-info">
                             <div class="stop-name">${escapeHtml(stop.ad)}</div>
                             <div class="stop-code">📍 ${escapeHtml(stop.kod)}${stop.detay ? ' • ' + escapeHtml(stop.detay) : ''}</div>
@@ -886,11 +884,11 @@ async function showNearbyStops(lat, lng, name = '') {
                 `).join('')}
             </div>
             <div class="modal-actions">
-                <button class="btn-secondary" onclick="showHome(); closeModal();">🏠 Ana Sayfaya Dön</button>
+                <button class="btn-secondary" data-action="home">🏠 Ana Sayfaya Dön</button>
             </div>
         `;
     } catch (error) {
-        elements.modalBody.innerHTML = `<p class="error-message">Hata: ${error.message}</p>`;
+        elements.modalBody.innerHTML = `<p class="error-message">Hata: ${escapeHtml(error.message)}</p>`;
     }
 }
 
@@ -899,7 +897,7 @@ async function loadAnnouncements() {
     try {
         showLoading(elements.announcementsList);
 
-        const data = await apiRequest('/hibrit/action.asp', { FNC: 'Duyurular', LAN: 'tr' });
+        const data = await apiRequest(API_ENDPOINTS.duyurular, { FNC: 'Duyurular', LAN: 'tr' });
 
         if (data.table && data.table.length > 0) {
             state.announcements = data.table;
@@ -908,7 +906,7 @@ async function loadAnnouncements() {
             elements.announcementsList.innerHTML = '<p class="empty-message">Duyuru bulunamadı</p>';
         }
     } catch (error) {
-        elements.announcementsList.innerHTML = `<p class="error-message">Hata: ${error.message}</p>`;
+        elements.announcementsList.innerHTML = `<p class="error-message">Hata: ${escapeHtml(error.message)}</p>`;
     }
 }
 
@@ -935,6 +933,10 @@ function escapeHtml(value) {
         '"': '&quot;',
         "'": '&#39;'
     }[ch]));
+}
+
+function isAbortError(error) {
+    return Boolean(error) && (error.name === 'AbortError' || error.code === 20);
 }
 
 function showLoading(element) {

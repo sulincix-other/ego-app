@@ -30,32 +30,33 @@ Ankara Büyükşehir Belediyesi EGO (Elektrik Gaz Otobüs) Genel Müdürlüğü 
 ## 🚀 Kurulum
 
 ### Gereksinimler
-- Python 3.13+
+- Go 1.22+ (harici bağımlılık yoktur)
 - Modern web tarayıcısı (Chrome, Firefox, Edge)
 
 ### Hızlı Başlatma
 
 ```bash
 # Sunucuyu başlat
-python3 server.py
+go run server.go
 ```
 
 Sunucu `http://localhost:5000` adresinde başlar.
 
-### Alternatif: Sanal Ortam
+### Derlenmiş İkili
 
 ```bash
-# Sanal ortam oluştur
-python3 -m venv venv
-source venv/bin/activate  # Linux/Mac
-# veya
-venv\Scripts\activate     # Windows
+# İkili dosyayı oluştur
+go build -o ego-bus-tracker .
 
-# Bağımlılıkları yükle
-pip install -r requirements.txt
+# Çalıştır
+./ego-bus-tracker
+```
 
-# Sunucuyu başlat
-python3 server.py
+### Sunucu Seçenekleri
+
+```bash
+# Farklı port ve statik dosya dizini
+go run server.go -addr :8080 -dir ./public
 ```
 
 ## 📖 Kullanım Kılavuzu
@@ -145,6 +146,11 @@ Geographic konum bazlı durak arama:
 ## 🔌 API Proxy
 
 Uygulama, EGO API'sine proxy olarak çalışır.
+
+### Proxy Güvenliği ve Cache
+- `/proxy` yalnızca `act.asp`, `action.asp` ve `srv.asp` uçlarındaki belgelenmiş `FNC` değerlerine izin verir.
+- Hat, durak, duyuru ve sefer gibi sabit veriler sunucuda 5 dakika cache'lenir; canlı otobüs verisi cache'lenmez.
+- `/api/geocode` sonuçları Ankara sınırlarına (bbox) göre filtrelenir.
 
 ### EGO API Bilgisi
 - **Host**: `https://egocptsrvand.ego.gov.tr`
@@ -267,9 +273,9 @@ curl "http://localhost:5000/proxy?path=%2Fhibrit%2Fsrv.asp&FNC=Otobus&HAT=174&DU
 ├── app.js              # Ana JavaScript dosyası
 ├── index.html          # Ana HTML dosyası
 ├── styles.css          # CSS stilleri
-├── server.py           # Python HTTP server
-├── package.json        # Node.js yapılandırması (opsiyonel)
-├── requirements.txt    # Python bağımlılıkları
+├── server.go           # Go HTTP server (proxy + statik dosyalar)
+├── go.mod              # Go modül tanımı
+├── package.json        # Node.js betikleri (opsiyonel)
 └── README.md           # Bu dosya
 ```
 
@@ -277,7 +283,7 @@ curl "http://localhost:5000/proxy?path=%2Fhibrit%2Fsrv.asp&FNC=Otobus&HAT=174&DU
 
 ```bash
 # Sunucuyu başlat
-python3 server.py
+go run server.go
 
 # Tarayıcıda aç
 http://localhost:5000
@@ -324,7 +330,7 @@ Bu proje eğitim amaçlıdır.
 ## 🙏 Katkıda Bulunanlar
 
 - Frontend: HTML, CSS, Vanilla JavaScript
-- Backend: Python 3 (http.server)
+- Backend: Go (net/http)
 - API: EGO OpenAPI (ASP-based hibrit servisler)
 
 ## 🌐 Online Test
