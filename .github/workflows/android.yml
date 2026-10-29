@@ -3,7 +3,6 @@ name: Android APK
 on:
   push:
     branches: [master]
-    tags: ["v*"]
   pull_request:
   workflow_dispatch:
 
@@ -17,29 +16,35 @@ jobs:
         with:
           bun-version: latest
 
+      # Bağımlılıkları kurun
+      - name: Bağımlılıkları kur
+        run: bun install --frozen-lockfile
+
+      # Java ortamını kurun
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "21"
           cache: gradle
 
-      - uses: android-actions/setup-android@v4
+      # Google 404 hatasını engelleyen Android SDK kurulumu
+      - name: Android SDK ortamını kurun
+        uses: android-actions/setup-android@v4
         with:
-          cmdline-tools-version: 11.0
+          cmdline-tools-version: 'latest'
 
-      - name: Accept SDK licenses
-        run: yes | sdkmanager --licenses > /dev/null || true
+      # Olası Gradle izin hatasını önleyin
+      - name: Gradle izinlerini ayarla
+        run: |
+          if [ -f "android/gradlew" ]; then chmod +x android/gradlew; fi
+          if [ -f "gradlew" ]; then chmod +x gradlew; fi
 
-      - name: Install Android SDK components
-        run: sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
-
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
-
-      - name: Build APK
+      # Derleme işlemi
+      - name: APK derle
         run: bun run apk
 
-      - name: Upload APK artifacts
+      # Çıktıyı artifact olarak yükleyin
+      - name: APK'yı yükle
         uses: actions/upload-artifact@v4
         with:
           name: ego-cepte-apk
