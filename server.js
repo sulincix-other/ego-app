@@ -1,20 +1,11 @@
-// EGO Cepte — Bun sunucusu
-// 1) public/ altındaki statik dosyaları sunar
-// 2) EGO API'lerine CORS başlıklı proxy yapar
-//
-// Proxy yolları:
-//   /api/hibrit/<endpoint>?<params>  -> https://egocptsrvand.ego.gov.tr/hibrit/<endpoint>
-//   /api/next/config                 -> https://egocptngapi.ego.gov.tr/api/config
-//   /api/next/config/ssl-pins        -> https://egocptngapi.ego.gov.tr/api/config/ssl-pins
-//   /api/next/geocode                -> https://egocptngapi.ego.gov.tr/api/geocode
-//   /api/next/route/compute          -> https://egocptngapi.ego.gov.tr/v1/route/compute
+// EGO Cepte — Bun server
+// Serves static files from public/ and proxies EGO APIs with CORS headers.
 
 const PUBLIC_DIR = `${import.meta.dir}/public`;
 
 const EGO_HIBRIT_BASE = "https://egocptsrvand.ego.gov.tr/hibrit/";
 const EGO_NG_BASE = "https://egocptngapi.ego.gov.tr";
 
-// Yeni nesil API yönlendirme tablosu
 const NG_ROUTES = new Map([
   ["/api/next/config", "/api/config"],
   ["/api/next/config/ssl-pins", "/api/config/ssl-pins"],
@@ -30,8 +21,9 @@ const CORS_HEADERS = {
 };
 
 /**
- * Hedef adrese istek atıp yanıtı tarayıcıya CORS başlıklarıyla döndürür.
- * EGO uçları text/html content-type döndürse de gövde JSON'dur; olduğu gibi aktarılır.
+ * Fetches the target URL and returns the response with CORS headers.
+ * EGO endpoints may return text/html even though the body is JSON; it is
+ * forwarded as-is.
  */
 async function proxyRequest(targetUrl, req) {
   const upstream = await fetch(targetUrl, {
@@ -44,7 +36,6 @@ async function proxyRequest(targetUrl, req) {
     },
   });
 
-  // Upstream gövdesini olduğu gibi al
   const body = await upstream.arrayBuffer();
 
   const headers = new Headers(CORS_HEADERS);
@@ -68,25 +59,22 @@ const server = Bun.serve({
     const url = new URL(req.url);
     const path = url.pathname;
 
-    // CORS preflight
     if (req.method === "OPTIONS") {
       return new Response(null, { status: 204, headers: CORS_HEADERS });
     }
 
-    // ---- Yeni nesil API proxy ----
     if (NG_ROUTES.has(path)) {
       const target = EGO_NG_BASE + NG_ROUTES.get(path) + url.search;
       try {
         return await proxyRequest(target, req);
       } catch (err) {
         return Response.json(
-          { error: `Yeni API'ye ulaşılamadı: ${err.message}` },
+          { error: `Cannot reach the new API: ${err.message}` },
           { status: 502, headers: CORS_HEADERS },
         );
       }
     }
 
-    // ---- Hibrit ASP proxy ----
     if (path.startsWith("/api/hibrit/")) {
       const rest = path.slice("/api/hibrit/".length);
       const target = EGO_HIBRIT_BASE + rest + url.search;
@@ -94,16 +82,14 @@ const server = Bun.serve({
         return await proxyRequest(target, req);
       } catch (err) {
         return Response.json(
-          { error: `EGO servisine ulaşılamadı: ${err.message}` },
+          { error: `Cannot reach the EGO service: ${err.message}` },
           { status: 502, headers: CORS_HEADERS },
         );
       }
     }
 
-    // ---- Statik dosyalar ----
     let filePath = path === "/" ? "/index.html" : path;
 
-    // Dizin dışına çıkmayı engelle
     if (filePath.includes("..")) {
       return new Response("Bad request", { status: 400 });
     }
@@ -115,7 +101,7 @@ const server = Bun.serve({
       });
     }
 
-    // SPA fallback: bilinmeyen yollar index.html'e düşsün
+    // SPA fallback: serve index.html for unknown paths.
     const index = Bun.file(`${PUBLIC_DIR}/index.html`);
     if (await index.exists()) {
       return new Response(index, {
@@ -127,4 +113,4 @@ const server = Bun.serve({
   },
 });
 
-console.log(`\n🚌  EGO Cepte çalışıyor: http://localhost:${server.port}\n`);
+console.log(`\n🚌  EGO Cepte running at http://localhost:${server.port}\n`);

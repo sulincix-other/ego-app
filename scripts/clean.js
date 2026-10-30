@@ -1,10 +1,9 @@
 #!/usr/bin/env bun
-// Proje temizliği: derleme çıktılarını siler.
-// Kaynak dosyalara ve imza anahtarlarına dokunmaz.
+// Removes build outputs. Source files and signing keys are never touched.
 //
-// Kullanım:
+// Usage:
 //   bun run clean          # dist/ + android/build/
-//   bun run clean --all    # ek olarak node_modules
+//   bun run clean --all    # also node_modules
 
 import { rm, stat } from "node:fs/promises";
 
@@ -33,6 +32,6 @@ for (const target of targets) {
 
 console.log(
   removed
-    ? `\n✅  Temizlik tamam (${removed} öğe silindi).\n`
-    : "\n✅  Silinecek bir şey yok, proje zaten temiz.\n",
+    ? `\n✅  Cleanup complete (${removed} item(s) removed).\n`
+    : "\n✅  Nothing to remove, the project is already clean.\n",
 );
