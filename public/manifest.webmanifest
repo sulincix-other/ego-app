@@ -2,8 +2,8 @@
   "name": "EGO Cepte — Ankara Otobüs Takip",
   "short_name": "EGO Cepte",
   "description": "Ankara EGO otobüs takip: canlı araç konumları, varış süreleri, durak ve hat arama.",
-  "start_url": "/",
-  "scope": "/",
+  "start_url": ".",
+  "scope": ".",
   "display": "standalone",
   "orientation": "portrait",
   "background_color": "#0a0f1c",
@@ -12,7 +12,7 @@
   "categories": ["travel", "navigation", "utilities"],
   "icons": [
     {
-      "src": "/icon.svg",
+      "src": "icon.svg",
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any maskable"

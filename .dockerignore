@@ -30,7 +30,6 @@ coverage/
 
 # Android
 android/build/
-android/app/build/
 
 # Geçici dosyalar
 *.tmp

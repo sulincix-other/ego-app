@@ -1,9 +1,9 @@
 #!/usr/bin/env bun
-// Proje temizliği: derleme çıktılarını ve `cap sync` tarafından üretilen
-// dosyaları siler. Kaynak dosyalara ve imza anahtarlarına dokunmaz.
+// Proje temizliği: derleme çıktılarını siler.
+// Kaynak dosyalara ve imza anahtarlarına dokunmaz.
 //
 // Kullanım:
-//   bun run clean          # derleme çıktıları + üretilen Android dosyaları
+//   bun run clean          # dist/ + android/build/
 //   bun run clean --all    # ek olarak node_modules
 
 import { rm, stat } from "node:fs/promises";
@@ -11,17 +11,7 @@ import { rm, stat } from "node:fs/promises";
 const root = `${import.meta.dir}/..`;
 const all = process.argv.includes("--all");
 
-const targets = [
-  "dist",
-  "android/.gradle",
-  "android/build",
-  "android/app/build",
-  "android/capacitor-cordova-android-plugins",
-  "android/app/src/main/assets/public",
-  "android/app/src/main/assets/capacitor.config.json",
-  "android/app/src/main/assets/capacitor.plugins.json",
-  "android/app/src/main/res/xml/config.xml",
-];
+const targets = ["dist", "android/build"];
 
 if (all) targets.push("node_modules");
 

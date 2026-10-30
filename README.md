@@ -10,8 +10,9 @@ Bu projede Bun'un kendi HTTP sunucusu (`server.js`) hem uygulamayı sunar hem de
 EGO API'lerine CORS başlıklı bir **proxy** yapar. Vite ya da başka bir araç
 gerekmez.
 
-Android sürümünde ise **CapacitorHttp** kullanıldığı için istekler cihazın yerel
-katmanında yapılır; CORS devreye girmez ve ayrı bir proxy sunucusuna gerek kalmaz.
+Android sürümü ise `public/` içeriğini minimal bir **WebView** içinde çalıştırır.
+`file://` kaynağına evrensel erişim açık olduğu için istekler doğrudan EGO
+uçlarına gider; CORS devreye girmez ve ayrı bir proxy sunucusuna gerek kalmaz.
 
 ## Çalıştırma
 
@@ -53,7 +54,7 @@ bun --watch server.js  # veya: bun run dev
 - **Duyurular** — EGO duyuru listesi
 - **Ayarlar** — uygulama config'i, SSL pin bilgisi, adres arama (geocoding), rota prewarm
 - **PWA** — manifest ve ikon ile telefona "ana ekrana ekle" desteği
-- **Android APK** — Capacitor tabanlı, proxy gerektirmeyen yerel uygulama
+- **Android APK** — Gradle'sız, minimal WebView tabanlı yerel uygulama
 
 ## Dosya yapısı
 
@@ -66,12 +67,14 @@ bun --watch server.js  # veya: bun run dev
 │   ├── app.js                 # İstemci mantığı ve API çağrıları
 │   ├── manifest.webmanifest   # PWA manifest
 │   └── icon.svg               # Uygulama ikonu
-├── android/                   # Capacitor Android projesi (Gradle)
+├── android/                   # Gradle'sız minimal Android projesi
+│   ├── AndroidManifest.xml
+│   ├── java/com/egocete/app/MainActivity.java
+│   └── res/                   # ikon ve tema
 ├── assets/
-│   ├── icon.png               # APK ikonu (1024×1024)
-│   └── splash.png             # Açılış ekranı (2732×2732)
-├── scripts/build-apk.js       # APK derleme betiği
-├── capacitor.config.json      # Capacitor ayarları
+│   └── icon.png               # APK ikonu (1024×1024)
+├── scripts/build-apk.js       # Gradle'sız APK derleyici
+├── scripts/clean.js           # Derleme çıktılarını temizler
 ├── .github/workflows/android.yml
 ├── openapi.json               # API tanımı
 └── package.json
@@ -79,37 +82,33 @@ bun --watch server.js  # veya: bun run dev
 
 ## Android APK
 
-Proje **Capacitor 7** ile Android kabuğuna sarılmıştır. APK, `public/` içeriğini
-WebView'da çalıştırır. API çağrıları `CapacitorHttp` ile yerel katmanda yapıldığı
-için tarayıcı CORS kuralı uygulanmaz; uygulama **kendi başına** çalışır, ayrı bir
-proxy sunucusu gerekmez. Web sürümü (`bun start`) ise eskisi gibi `server.js`
-proxy'sini kullanır.
+Android sürümü, `public/` içeriğini **tek bir WebView** içinde çalıştıran
+minimal bir uygulamadır. Gradle, Capacitor, AndroidX veya başka bir kütüphane
+yoktur; APK yalnızca Android SDK'nın standart araçlarıyla paketlenir.
 
 ### Gereksinimler
 
-- [Bun](https://bun.sh) 1.x
-- **JDK 21**
-- **Android SDK** (Android Studio ile veya komut satırı araçlarıyla)
-  - Platform 35 ve Build-Tools 35.0.0
-  - `ANDROID_HOME` ortam değişkeni tanımlı olmalı
+- [Bun](https://bun.sh) 1.x (derleme betiği için; npm bağımlılığı yok, `bun install` gerekmez)
+- **JDK 17+** (`javac`, `keytool`, `jar`)
+- **Android SDK**
+  - Platform 35 (`platforms/android-35/android.jar`)
+  - Build-Tools 35.0.0 (`aapt2`, `d8`, `zipalign`, `apksigner`)
+  - `ANDROID_HOME` tanımlı olmalı (veya SDK `~/Android/Sdk` altında olmalı)
 
 ### APK üretme
 
 ```bash
-bun install
 bun run apk          # debug APK -> dist/ego-cepte-<sürüm>-debug.apk
 ```
+
+Betik sırasıyla `aapt2`, `javac`, `d8`, `zipalign` ve `apksigner` çağırır.
+Debug APK, `~/.android/debug.keystore` yoksa otomatik oluşturulan standart debug
+anahtarıyla imzalanır.
 
 Cihaza kurmak için:
 
 ```bash
 adb install -r dist/ego-cepte-1.0.0-debug.apk
-```
-
-Android Studio ile açmak / çalıştırmak için:
-
-```bash
-bun run android:open
 ```
 
 ### İmzalı release APK
@@ -121,15 +120,16 @@ keytool -genkeypair -v -keystore ego-cepte.jks -alias ego \
   -keyalg RSA -keysize 2048 -validity 10000
 ```
 
-Sonra ortam değişkenlerini ayarlayıp imzalayın:
+Sonra ortam değişkenlerini ayarlayıp derleyin:
 
 ```bash
-export EGO_ANDROID_KEYSTORE="$PWD/ego-cepte.jks"
-export EGO_ANDROID_KEY_ALIAS="ego"
-export EGO_ANDROID_KEY_PASSWORD="parola"
-export EGO_ANDROID_STORE_PASSWORD="parola"
+export EGO_KEYSTORE_FILE="$PWD/ego-cepte.jks"
+export EGO_KEY_ALIAS="ego"
+export EGO_KEYSTORE_PASSWORD="parola"
+export EGO_KEY_PASSWORD="parola"
 
-bun run sign-apk
+bun run apk --release
+# -> dist/ego-cepte-<sürüm>-release.apk
 ```
 
 > `*.jks` ve `*.keystore` dosyaları `.gitignore` içindedir. Anahtar dosyasını ve
@@ -137,22 +137,16 @@ bun run sign-apk
 
 ### Sürüm ve ikon
 
-- Uygulama sürümü `package.json` içindeki `version` alanından okunur. Play
-  Store'a her yüklemede `versionCode` değerini `android/app/build.gradle`
-  içinde artırın.
-- İkon ve açılış ekranı `assets/icon.png` (1024×1024) ile
-  `assets/splash.png` (2732×2732) dosyalarından üretilir:
-
-```bash
-bun run android:icons
-```
+- Sürüm adı `package.json` içindeki `version` alanından okunur.
+- `versionCode` varsayılan olarak `1`'dir; artırmak için
+  `EGO_VERSION_CODE=2 bun run apk` kullanın.
+- Uygulama ikonu `android/res/drawable/ic_launcher.png` dosyasıdır. Kaynak
+  görsel `assets/icon.png` (1024×1024) dosyasından kopyalanmıştır.
 
 ### Temizlik
 
-Derleme çıktılarını ve `cap sync` tarafından üretilen Android dosyalarını silmek için:
-
 ```bash
-bun run clean        # dist/ + Android build çıktıları
+bun run clean        # dist/ + android/build/
 bun run clean --all  # ek olarak node_modules
 ```
 
@@ -160,18 +154,18 @@ Komut kaynak dosyalara, ikonlara ve imza anahtarlarına dokunmaz.
 
 ### GitHub Actions
 
-`.github/workflows/android.yml` her push/PR'da debug APK derler ve
-**ego-cepte-apk** adıyla artifact olarak yükler. Böylece yerel Android SDK
-kurulumu olmadan da APK indirilebilir.
+`.github/workflows/android.yml` her push/PR'da debug APK derler ve artifact
+olarak yükler. Gradle adımı yoktur.
 
 ### Nasıl çalışır?
 
 | Ortam | API çağrısı | CORS |
 |---|---|---|
 | Web (`bun start`) | `/api/...` → `server.js` proxy | Sunucu CORS başlığı ekler |
-| Android (Capacitor) | Doğrudan `egocptsrvand` / `egocptngapi` | `CapacitorHttp` yerel istek yaptığı için yok |
+| Android (WebView) | Doğrudan `egocptsrvand` / `egocptngapi` | `file://` kaynağına evrensel erişim açık olduğu için yok |
 
 `public/app.js` içindeki `isNativeApp` ve `apiUrl()` bu seçimi yapar.
+`MainActivity`, JS tarafına `EGOBridge.isNative()` köprüsünü ekler.
 
 ## Yasal not
 

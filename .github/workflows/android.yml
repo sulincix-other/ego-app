@@ -2,7 +2,7 @@ name: Android APK
 
 on:
   push:
-    branches: [master]
+    branches: [master, main]
   pull_request:
   workflow_dispatch:
 
@@ -16,41 +16,23 @@ jobs:
         with:
           bun-version: latest
 
-      # Bağımlılıkları kurun
-      - name: Bağımlılıkları kur
-        run: bun install --frozen-lockfile
-
-      # Java ortamını kurun
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: "21"
-          cache: gradle
+          java-version: "17"
 
-      # Google 404 hatasını engelleyen Android SDK kurulumu
-      - name: Android SDK ortamını kurun
-        uses: android-actions/setup-android@v4
+      - uses: android-actions/setup-android@v4
         with:
-          cmdline-tools-version: 'latest'
+          cmdline-tools-version: latest
 
-      # Olası Gradle izin hatasını önleyin
-      - name: Gradle izinlerini ayarla
-        run: |
-          if [ -f "android/gradlew" ]; then chmod +x android/gradlew; fi
-          if [ -f "gradlew" ]; then chmod +x gradlew; fi
+      - name: Android 35 platformunu ve build-tools'u kur
+        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
 
-      # Derleme işlemi
       - name: APK derle
         run: bun run apk
 
-      # Çıktıyı artifact olarak yükleyin
       - name: APK'yı yükle
-        uses: "marvinpinto/action-automatic-releases@latest"
+        uses: actions/upload-artifact@v4
         with:
-          repo_token: "${{ secrets.GITHUB_TOKEN }}"
-          automatic_release_tag: "current"
-          prerelease: false
-          title: "Latest release"
-          files: |
-            dist/*.apk
-            android/app/build/outputs/apk/**/*.apk
+          name: ego-cepte-apk
+          path: dist/*.apk

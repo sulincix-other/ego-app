@@ -7,7 +7,6 @@ dist/
 
 # Android çıktıları
 android/build/
-android/app/build/
 *.apk
 *.jks
 *.keystore

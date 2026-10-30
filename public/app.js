@@ -31,12 +31,11 @@ const UID =
 
 // ---------------- API adresleri ----------------
 // Web'de (bun server.js) istekler CORS başlıklı yerel proxy üzerinden gider.
-// Android kabuğunda (Capacitor) ise doğrudan EGO uçlarına gider; CapacitorHttp
-// isteği yerel katmanda yaptığı için tarayıcı CORS kuralı uygulanmaz.
+// Android WebView'da ise doğrudan EGO uçlarına gider; MainActivity dosya
+// kaynağına evrensel erişim izni verdiği için tarayıcı CORS kuralı uygulanmaz.
 
 const isNativeApp =
-  typeof window !== "undefined" &&
-  window.Capacitor?.isNativePlatform?.() === true;
+  typeof window !== "undefined" && window.EGOBridge?.isNative?.() === true;
 
 const EGO_HIBRIT_BASE = "https://egocptsrvand.ego.gov.tr/hibrit/";
 const EGO_NG_BASE = "https://egocptngapi.ego.gov.tr";
@@ -92,8 +91,33 @@ async function nextApi(path, params = {}) {
   return request(apiUrl("next", path, new URLSearchParams(params)));
 }
 
+/** Android WebView'da dosya kaynağından çapraz kaynak istek (CORS yok). */
+function xhrRequest(url) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("GET", url, true);
+    xhr.timeout = 20000;
+    xhr.onload = () => {
+      let data;
+      try {
+        data = xhr.responseText ? JSON.parse(xhr.responseText) : null;
+      } catch {
+        reject(new Error("Sunucudan geçersiz yanıt alındı."));
+        return;
+      }
+      if (xhr.status >= 200 && xhr.status < 300) resolve(data);
+      else reject(new Error(data?.error || `Sunucu hatası (${xhr.status})`));
+    };
+    xhr.onerror = () => reject(new Error("Sunucuya ulaşılamadı."));
+    xhr.ontimeout = () => reject(new Error("İstek zaman aşımına uğradı."));
+    xhr.send();
+  });
+}
+
 /** Ortak istek: yanıt her zaman JSON'a çevrilir. */
 async function request(url, options) {
+  if (isNativeApp) return xhrRequest(url);
+
   const res = await fetch(url, options);
   const text = await res.text();
 
@@ -573,8 +597,8 @@ $("#prewarm-btn").addEventListener("click", async (e) => {
   out.textContent = "Çalıştırılıyor…";
 
   try {
-    const res = await fetch(apiUrl("next", "route/compute"));
-    out.textContent = `Yanıt: ${res.status} ${res.statusText}`;
+    await request(apiUrl("next", "route/compute"));
+    out.textContent = "Rota servisi ısıtıldı.";
     toast("Rota servisi ısıtıldı.", "ok");
   } catch (err) {
     out.textContent = `Hata: ${err.message}`;
