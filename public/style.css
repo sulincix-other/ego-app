@@ -1,6 +1,6 @@
 /* ============================================================
    EGO Cepte — arayüz stilleri
-   Dracula Teması, Mobil Öncelikli, Statik (Animasyonsuz)
+   Dracula Teması, Mobil Öncelikli, Hafif Geçiş Efektli
    ============================================================ */
 
 :root {
@@ -31,9 +31,9 @@
 
 * { 
   box-sizing: border-box; 
-  /* Tüm animasyon ve geçiş efektleri kaldırıldı */
-  animation: none !important;
-  transition: none !important;
+  /* Animasyon ve geçişler, sadece tab bar ve içerik geçişleri için */
+  animation: none;
+  transition: none;
 }
 
 html { -webkit-text-size-adjust: 100%; }
@@ -763,4 +763,105 @@ body {
 @media (min-width: 720px) {
   .app { padding-left: 24px; padding-right: 24px; }
   .tabbar { bottom: 20px; }
+}
+
+/* ============================================================
+   Geçiş Efektleri
+   ============================================================ */
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeOut {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+}
+
+@keyframes tabSlide {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes tabSlideOut {
+  from {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateX(-100%);
+    opacity: 0;
+  }
+}
+
+/* Tab bar geçişleri */
+.tabbar {
+  transition: background-color 0.2s, transform 0.2s;
+}
+.tabbar button {
+  transition: background-color 0.2s, color 0.2s, transform 0.1s;
+}
+.tabbar button.active {
+  transform: scale(1.08);
+}
+.tabbar button:active {
+  transform: scale(0.96);
+}
+
+/* View geçişleri */
+.view {
+  animation: slideIn 0.28s ease-out;
+}
+.view.active {
+  animation: slideIn 0.28s ease-out;
+}
+.view:not(.active) {
+  display: none;
+}
+
+/* İçerik kartları için hafif geçiş */
+.card {
+  transition: border-color 0.15s, background-color 0.15s, transform 0.15s;
+}
+.card:hover {
+  transform: translateY(-1px);
+}
+
+/* Liste elemanları */
+.list-item, .tl-item {
+  transition: border-color 0.15s, background-color 0.15s, transform 0.15s;
+}
+.list-item:hover, .tl-item:hover {
+  transform: translateY(-1px);
+}
+
+/* Butonlar */
+.btn {
+  transition: background-color 0.15s, transform 0.15s, box-shadow 0.15s;
+}
+.btn.primary:hover {
+  box-shadow: 0 6px 16px rgba(189, 147, 249, 0.4);
+}
+
+/* Chip'ler */
+.chip, .time-chip {
+  transition: background-color 0.15s, border-color 0.15s;
 }
