@@ -23,10 +23,10 @@ import android.webkit.WebViewClient;
 import org.json.JSONObject;
 
 /**
- * EGO Cepte — tek dosyalık Android kabuğu.
+ * EGO Cepte — single-file Android shell.
  *
- * public/ içeriği APK'nın assets/public klasöründen yüklenir. Gradle, Capacitor
- * veya başka bir kütüphane yoktur; yalnızca Android SDK'nın WebView'ı kullanılır.
+ * Loads public/ from the APK's assets/public directory using the Android SDK
+ * WebView.
  */
 public class MainActivity extends Activity {
 
@@ -41,7 +41,7 @@ public class MainActivity extends Activity {
     private final Handler handler = new Handler(Looper.getMainLooper());
     private boolean pendingLocationRequest;
 
-    /** JS tarafına "biz Android uygulamasıyız" bilgisini veren küçük köprü. */
+    /** Small bridge that tells the JS side this is the Android app. */
     private class Bridge {
         @JavascriptInterface
         public boolean isNative() {
@@ -69,8 +69,8 @@ public class MainActivity extends Activity {
         settings.setGeolocationEnabled(true);
         settings.setAllowFileAccess(true);
         settings.setAllowContentAccess(true);
-        // file:///android_asset altındaki sayfanın doğrudan EGO API'lerine
-        // istek atabilmesi için (CORS yok).
+        // Allow the page under file:///android_asset to call EGO APIs directly
+        // (no CORS).
         settings.setAllowFileAccessFromFileURLs(true);
         settings.setAllowUniversalAccessFromFileURLs(true);
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
@@ -105,15 +105,14 @@ public class MainActivity extends Activity {
         if ("file".equals(uri.getScheme())) {
             return false;
         }
-        // Uygulama dışı bağlantıları sistem tarayıcısında aç.
+        // Open external links in the system browser.
         startActivity(new Intent(Intent.ACTION_VIEW, uri));
         return true;
     }
 
     // ---------------------------------------------------------------------
-    // Konum: WebView'ın geolocation API'si yerine doğrudan Android konum
-    // servisi kullanılır. Böylece file:// kaynağı ve WebView izin sorunları
-    // devre dışı kalır.
+    // Location: use Android's location service directly instead of the WebView
+    // geolocation API, avoiding file:// origin and WebView permission issues.
     // ---------------------------------------------------------------------
 
     private void requestLocation() {
@@ -146,7 +145,7 @@ public class MainActivity extends Activity {
             return;
         }
 
-        // Son bilinen konum tazeyse hemen kullan.
+        // Use the last known location if it is fresh.
         Location best = null;
         for (String provider : new String[] {
                 LocationManager.GPS_PROVIDER,
@@ -159,7 +158,7 @@ public class MainActivity extends Activity {
                     best = candidate;
                 }
             } catch (Exception ignored) {
-                // Sağlayıcı yoksa veya izin yoksa diğerini dene.
+                // Try the next provider if this one is unavailable or not permitted.
             }
         }
 
@@ -193,7 +192,8 @@ public class MainActivity extends Activity {
                 LocationManager.GPS_PROVIDER,
                 LocationManager.NETWORK_PROVIDER
         }) {
-            // GPS hassas konum izni ister; yaklaşık konumda ağ sağlayıcısı yeterli.
+            // GPS requires precise location permission; the network provider is
+            // enough for coarse location.
             if (LocationManager.GPS_PROVIDER.equals(provider) && !fineGranted) continue;
 
             try {
@@ -203,7 +203,7 @@ public class MainActivity extends Activity {
                     requested = true;
                 }
             } catch (Exception ignored) {
-                // Sağlayıcı kullanılamıyorsa diğerini dene.
+                // Try the next provider if this one is unavailable.
             }
         }
 
@@ -230,7 +230,6 @@ public class MainActivity extends Activity {
             try {
                 locationManager.removeUpdates(locationListener);
             } catch (Exception ignored) {
-                // Yoksay.
             }
         }
         locationListener = null;

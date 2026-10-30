@@ -25,14 +25,13 @@ jobs:
         with:
           cmdline-tools-version: latest
 
-      - name: Android 35 platformunu ve build-tools'u kur
+      - name: Install Android 35 platform and build-tools
         run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
 
-      - name: APK derle
+      - name: Build APK
         run: bun run apk
 
-      # Çıktıyı artifact olarak yükleyin
-      - name: APK'yı yükle
+      - name: Upload APK
         uses: "marvinpinto/action-automatic-releases@latest"
         with:
           repo_token: "${{ secrets.GITHUB_TOKEN }}"

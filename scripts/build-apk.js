@@ -1,12 +1,12 @@
 #!/usr/bin/env bun
-// EGO Cepte — Android APK derleyicisi.
+// EGO Cepte — Android APK builder.
 //
-// Gradle, Capacitor veya npm paketi kullanmaz. Yalnızca Android SDK'nın
-// standart araçlarını (aapt2, d8, zipalign, apksigner) ve JDK'yı çağırır.
+// Uses only standard Android SDK tools (aapt2, d8, zipalign, apksigner) and
+// the JDK.
 //
-// Kullanım:
-//   bun run apk              # debug APK (otomatik debug anahtarıyla imzalı)
-//   bun run apk --release    # release APK (EGO_KEYSTORE_* değişkenleri gerekir)
+// Usage:
+//   bun run apk              # debug APK (signed with an automatic debug key)
+//   bun run apk --release    # release APK (requires EGO_KEYSTORE_* variables)
 
 import { cp, mkdir, readdir, rm } from "node:fs/promises";
 import { existsSync } from "node:fs";
@@ -35,7 +35,7 @@ function tool(dir, name) {
     const full = path.join(dir, candidate);
     if (existsSync(full)) return full;
   }
-  fail(`Araç bulunamadı: ${path.join(dir, name)}`);
+  fail(`Tool not found: ${path.join(dir, name)}`);
 }
 
 function javaTool(name) {
@@ -52,7 +52,7 @@ async function run(command, label) {
     stderr: "inherit",
   });
   const code = await proc.exited;
-  if (code !== 0) fail(`Komut başarısız (${code}): ${command.join(" ")}`);
+  if (code !== 0) fail(`Command failed (${code}): ${command.join(" ")}`);
 }
 
 function latestVersion(directory, requiredFile) {
@@ -82,7 +82,7 @@ function findSdk() {
     if (existsSync(path.join(candidate, "build-tools"))) return candidate;
   }
   fail(
-    "Android SDK bulunamadı. ANDROID_HOME ayarlayın veya SDK'yı ~/Android/Sdk altına kurun.",
+    "Android SDK not found. Set ANDROID_HOME or install the SDK under ~/Android/Sdk.",
   );
 }
 
@@ -97,7 +97,7 @@ async function walk(directory) {
 }
 
 // ---------------------------------------------------------------------------
-// SDK ve araçlar
+// SDK and tools
 // ---------------------------------------------------------------------------
 
 const sdk = findSdk();
@@ -106,18 +106,18 @@ const buildToolsVersion = await latestVersion(
   path.join(sdk, "build-tools"),
   "aapt2",
 );
-if (!buildToolsVersion) fail("Android SDK build-tools bulunamadı.");
+if (!buildToolsVersion) fail("Android SDK build-tools not found.");
 const buildTools = path.join(sdk, "build-tools", buildToolsVersion);
 
 const platformVersion = await latestVersion(
   path.join(sdk, "platforms"),
   "android.jar",
 );
-if (!platformVersion) fail("Android SDK platform (android.jar) bulunamadı.");
+if (!platformVersion) fail("Android SDK platform (android.jar) not found.");
 const androidJar = path.join(sdk, "platforms", platformVersion, "android.jar");
 
 if (Number(platformVersion.replace("android-", "")) < targetSdk) {
-  fail(`Android ${targetSdk} platformu gerekli (bulunan: ${platformVersion}).`);
+  fail(`Android ${targetSdk} platform is required (found: ${platformVersion}).`);
 }
 
 const aapt2 = tool(buildTools, "aapt2");
@@ -130,11 +130,11 @@ const keytool = javaTool("keytool");
 const jar = javaTool("jar");
 
 // ---------------------------------------------------------------------------
-// Derleme
+// Build
 // ---------------------------------------------------------------------------
 
 console.log(
-  `\n📦  EGO Cepte Android (${release ? "release" : "debug"}) derleniyor…`,
+  `\n📦  Building EGO Cepte Android (${release ? "release" : "debug"})…`,
 );
 console.log(`    SDK: ${sdk}`);
 console.log(`    build-tools: ${buildToolsVersion}  platform: ${platformVersion}\n`);
@@ -145,19 +145,19 @@ await mkdir(path.join(buildDir, "classes"), { recursive: true });
 await mkdir(path.join(buildDir, "dex"), { recursive: true });
 await mkdir(distDir, { recursive: true });
 
-// Web dosyalarını APK'nın assets/public klasörüne kopyala.
+// Copy web files into the APK's assets/public directory.
 await cp(path.join(root, "public"), path.join(buildDir, "assets", "public"), {
   recursive: true,
 });
 
-// 1) Kaynakları derle
+// 1) Compile resources
 const resourcesZip = path.join(buildDir, "resources.zip");
 await run(
   [aapt2, "compile", "--dir", path.join(androidDir, "res"), "-o", resourcesZip],
-  "Kaynaklar derleniyor (aapt2 compile)",
+  "Compiling resources (aapt2 compile)",
 );
 
-// 2) Manifest + kaynaklar + assets -> imzasız APK
+// 2) Manifest + resources + assets -> unsigned APK
 const unsignedApk = path.join(buildDir, "app-unsigned.apk");
 await run(
   [
@@ -183,10 +183,10 @@ await run(
     versionName,
     "--auto-add-overlay",
   ],
-  "APK paketleniyor (aapt2 link)",
+  "Packaging APK (aapt2 link)",
 );
 
-// 3) Java kaynağını derle
+// 3) Compile the Java source
 const classesDir = path.join(buildDir, "classes");
 await run(
   [
@@ -204,21 +204,21 @@ await run(
     classesDir,
     path.join(androidDir, "java", "com", "egocete", "app", "MainActivity.java"),
   ],
-  "Java kodu derleniyor (javac)",
+  "Compiling Java sources (javac)",
 );
 
-// 4) Sınıf dosyalarını DEX'e çevir
+// 4) Convert class files to DEX
 const dexDir = path.join(buildDir, "dex");
 const classFiles = (await walk(classesDir)).filter((file) =>
   file.endsWith(".class"),
 );
-if (classFiles.length === 0) fail("Derlenecek sınıf bulunamadı.");
+if (classFiles.length === 0) fail("No classes to compile.");
 await run(
   [d8, "--min-api", String(minSdk), "--lib", androidJar, "--output", dexDir, ...classFiles],
-  "DEX üretiliyor (d8)",
+  "Generating DEX (d8)",
 );
 
-// 5) classes.dex'i APK'ya ekle (JDK'nın jar aracı yeterli)
+// 5) Add classes.dex to the APK (the JDK's jar tool is enough)
 await run([
   jar,
   "--update",
@@ -229,7 +229,7 @@ await run([
   "classes.dex",
 ]);
 
-// 6) İmza anahtarını hazırla
+// 6) Prepare the signing key
 let keystore;
 let keyAlias;
 let storePassword;
@@ -243,11 +243,11 @@ if (release) {
 
   if (!keystore || !keyAlias || !storePassword || !keyPassword) {
     fail(
-      "Release imzası için EGO_KEYSTORE_FILE, EGO_KEY_ALIAS, " +
-        "EGO_KEYSTORE_PASSWORD ve EGO_KEY_PASSWORD tanımlanmalı.",
+      "Release signing requires EGO_KEYSTORE_FILE, EGO_KEY_ALIAS, " +
+        "EGO_KEYSTORE_PASSWORD and EGO_KEY_PASSWORD.",
     );
   }
-  if (!existsSync(keystore)) fail(`Keystore bulunamadı: ${keystore}`);
+  if (!existsSync(keystore)) fail(`Keystore not found: ${keystore}`);
 } else {
   const debugDir = path.join(homedir(), ".android");
   keystore = path.join(debugDir, "debug.keystore");
@@ -279,14 +279,14 @@ if (release) {
         "-dname",
         "CN=Android Debug,O=Android,C=US",
       ],
-      "Debug imza anahtarı oluşturuluyor (keytool)",
+      "Generating debug signing key (keytool)",
     );
   }
 }
 
-// 7) Hizala ve imzala
+// 7) Align and sign
 const alignedApk = path.join(buildDir, "app-aligned.apk");
-await run([zipalign, "-f", "4", unsignedApk, alignedApk], "APK hizalanıyor (zipalign)");
+await run([zipalign, "-f", "4", unsignedApk, alignedApk], "Aligning APK (zipalign)");
 
 const outputName = `ego-cepte-${versionName}-${release ? "release" : "debug"}.apk`;
 const outputApk = path.join(distDir, outputName);
@@ -309,10 +309,10 @@ await run(
     outputApk,
     alignedApk,
   ],
-  "APK imzalanıyor (apksigner)",
+  "Signing APK (apksigner)",
 );
 
 await run([apksigner, "verify", outputApk]);
 
 const size = (await Bun.file(outputApk).size / 1024 / 1024).toFixed(1);
-console.log(`\n✅  APK hazır: dist/${outputName} (${size} MB)\n`);
+console.log(`\n✅  APK ready: dist/${outputName} (${size} MB)\n`);

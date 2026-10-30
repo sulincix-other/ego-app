@@ -7,31 +7,31 @@ docker-compose*.yml
 Dockerfile*
 .dockerignore
 
-# Derleme çıktıları
+# Build outputs
 dist/
 **/build/
 *.apk
 *.jks
 *.keystore
 
-# IDE ve editor
+# IDE and editors
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
 
-# Node modülü cache
+# Node module cache
 node_modules/.cache/
 
-# Test ve log dosyaları
+# Tests and logs
 *.log
 coverage/
 
 # Android
 android/build/
 
-# Geçici dosyalar
+# Temporary files
 *.tmp
 *.temp
 temp/

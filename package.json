@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "EGO Cepte — Ankara otobüs takip uygulaması (Bun tabanlı, web + mobil uyumlu)",
+  "description": "EGO Cepte — Ankara bus tracking app (Bun-based, web + mobile)",
   "scripts": {
     "start": "bun run server.js",
     "dev": "bun --watch server.js",

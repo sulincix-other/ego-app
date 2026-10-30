@@ -1,21 +1,21 @@
 # EGO Cepte - Docker image
-# Debian tabanlı, minimal ve hafif
+# Debian-based, minimal and lightweight
 
 FROM debian:stable-slim
 
 LABEL maintainer="EGO Cepte Team"
-LABEL description="EGO Cepte - Ankara otobüs takip uygulaması"
+LABEL description="EGO Cepte - Ankara bus tracking app"
 
 WORKDIR /app
 
-# Bun ve gerekli paketleri yükle
+# Install Bun and required packages
 RUN apt-get update \
     && apt-get install -yq --no-install-recommends ca-certificates curl bash unzip \
     && rm -rf /var/lib/apt/lists/*
 RUN curl -fsSL https://bun.sh/install | bash
 RUN ln -s /root/.bun/bin/bun /usr/local/bin/bun
 
-# Uygulama kodunu kopyala (npm bağımlılığı yok)
+# Copy the application code
 COPY . .
 
 EXPOSE 3000

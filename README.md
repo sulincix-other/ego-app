@@ -7,8 +7,7 @@ Ankara EGO otobüs takip uygulaması. `openapi.json` içindeki servisleri kullan
 
 EGO servisleri tarayıcıdan doğrudan çağrıldığında **CORS** nedeniyle engellenir.
 Bu projede Bun'un kendi HTTP sunucusu (`server.js`) hem uygulamayı sunar hem de
-EGO API'lerine CORS başlıklı bir **proxy** yapar. Vite ya da başka bir araç
-gerekmez.
+EGO API'lerine CORS başlıklı bir **proxy** yapar.
 
 Android sürümü ise `public/` içeriğini minimal bir **WebView** içinde çalıştırır.
 `file://` kaynağına evrensel erişim açık olduğu için istekler doğrudan EGO
@@ -54,7 +53,7 @@ bun --watch server.js  # veya: bun run dev
 - **Duyurular** — EGO duyuru listesi
 - **Ayarlar** — uygulama config'i, SSL pin bilgisi, adres arama (geocoding), rota prewarm
 - **PWA** — manifest ve ikon ile telefona "ana ekrana ekle" desteği
-- **Android APK** — Gradle'sız, minimal WebView tabanlı yerel uygulama
+- **Android APK** — minimal WebView tabanlı yerel uygulama
 
 ## Dosya yapısı
 
@@ -67,13 +66,13 @@ bun --watch server.js  # veya: bun run dev
 │   ├── app.js                 # İstemci mantığı ve API çağrıları
 │   ├── manifest.webmanifest   # PWA manifest
 │   └── icon.svg               # Uygulama ikonu
-├── android/                   # Gradle'sız minimal Android projesi
+├── android/                   # Minimal Android projesi
 │   ├── AndroidManifest.xml
 │   ├── java/com/egocete/app/MainActivity.java
 │   └── res/                   # ikon ve tema
 ├── assets/
 │   └── icon.png               # APK ikonu (1024×1024)
-├── scripts/build-apk.js       # Gradle'sız APK derleyici
+├── scripts/build-apk.js       # APK derleyici
 ├── scripts/clean.js           # Derleme çıktılarını temizler
 ├── .github/workflows/android.yml
 ├── openapi.json               # API tanımı
@@ -83,12 +82,12 @@ bun --watch server.js  # veya: bun run dev
 ## Android APK
 
 Android sürümü, `public/` içeriğini **tek bir WebView** içinde çalıştıran
-minimal bir uygulamadır. Gradle, Capacitor, AndroidX veya başka bir kütüphane
-yoktur; APK yalnızca Android SDK'nın standart araçlarıyla paketlenir.
+minimal bir uygulamadır. APK yalnızca Android SDK'nın standart araçlarıyla
+paketlenir.
 
 ### Gereksinimler
 
-- [Bun](https://bun.sh) 1.x (derleme betiği için; npm bağımlılığı yok, `bun install` gerekmez)
+- [Bun](https://bun.sh) 1.x (derleme betiği için)
 - **JDK 17+** (`javac`, `keytool`, `jar`)
 - **Android SDK**
   - Platform 35 (`platforms/android-35/android.jar`)
@@ -155,7 +154,7 @@ Komut kaynak dosyalara, ikonlara ve imza anahtarlarına dokunmaz.
 ### GitHub Actions
 
 `.github/workflows/android.yml` her push/PR'da debug APK derler ve artifact
-olarak yükler. Gradle adımı yoktur.
+olarak yükler.
 
 ### Nasıl çalışır?
 
