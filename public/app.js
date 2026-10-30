@@ -311,6 +311,8 @@ $("#nearby-btn").addEventListener("click", async (e) => {
       <div class="section-head"><h3>En yakın duraklar</h3><span class="badge">${rows.length} sonuç</span></div>
       ${rows.map(nearbyItem).join("")}
     `;
+    // Duraklar gösterildiğine göre konum istemine gerek kalmadı; gizle.
+    $("#home-hero").hidden = true;
   } catch (err) {
     const msg =
       err?.code === 1 || /izin/i.test(err?.message || "")
