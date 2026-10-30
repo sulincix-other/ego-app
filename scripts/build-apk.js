@@ -198,7 +198,7 @@ await run(
     "-target",
     "8",
     "-Xlint:-options",
-    "-bootclasspath",
+    "-classpath",
     androidJar,
     "-d",
     classesDir,

@@ -236,55 +236,91 @@ async function loadHomeStatus() {
   }
 }
 
+/** Konum alır: Android'de yerel köprü, web'de tarayıcı API'si. */
+function getLocation() {
+  if (isNativeApp && typeof window.EGOBridge?.requestLocation === "function") {
+    return new Promise((resolve, reject) => {
+      let timer;
+      const cleanup = () => {
+        clearTimeout(timer);
+        delete window.onNativeLocation;
+        delete window.onNativeLocationError;
+      };
+
+      window.onNativeLocation = (loc) => {
+        cleanup();
+        resolve({
+          coords: {
+            latitude: loc.latitude,
+            longitude: loc.longitude,
+            accuracy: loc.accuracy,
+          },
+        });
+      };
+
+      window.onNativeLocationError = (message) => {
+        cleanup();
+        reject(new Error(message || "Konum alınamadı."));
+      };
+
+      timer = setTimeout(() => {
+        cleanup();
+        reject(new Error("Konum alınamadı. GPS'in açık olduğundan emin olun."));
+      }, 25_000);
+
+      window.EGOBridge.requestLocation();
+    });
+  }
+
+  return new Promise((resolve, reject) => {
+    if (!("geolocation" in navigator)) {
+      reject(new Error("Bu tarayıcı konum desteği sunmuyor."));
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(resolve, reject, {
+      enableHighAccuracy: true,
+      timeout: 15_000,
+      maximumAge: 30_000,
+    });
+  });
+}
+
 // Yakın duraklar
 $("#nearby-btn").addEventListener("click", async (e) => {
   const btn = e.currentTarget;
   const box = $("#home-nearby");
 
-  if (!("geolocation" in navigator)) {
-    toast("Bu tarayıcı konum desteği sunmuyor.", "error");
-    return;
-  }
-
   btn.disabled = true;
   btn.textContent = "Konum alınıyor…";
   box.innerHTML = `<div class="skeleton"></div><div class="skeleton"></div>`;
 
-  navigator.geolocation.getCurrentPosition(
-    async (pos) => {
-      try {
-        const data = await hibrit("action.asp", {
-          FNC: "YakinDuraklar",
-          LAT: pos.coords.latitude,
-          LNG: pos.coords.longitude,
-          MSF: 500,
-        });
-        const rows = data?.table || [];
-        if (!rows.length) {
-          box.innerHTML = emptyState("🚏", "500 m içinde durak bulunamadı.");
-          return;
-        }
-        box.innerHTML = `
-          <div class="section-head"><h3>En yakın duraklar</h3><span class="badge">${rows.length} sonuç</span></div>
-          ${rows.map(nearbyItem).join("")}
-        `;
-      } catch (err) {
-        box.innerHTML = emptyState("⚠️", `Duraklar yüklenemedi: ${esc(err.message)}`);
-      } finally {
-        resetNearbyBtn();
-      }
-    },
-    (err) => {
-      const msg =
-        err.code === err.PERMISSION_DENIED
-          ? "Konum izni verilmedi. Tarayıcı ayarlarından izin verin."
-          : "Konum alınamadı. Tekrar deneyin.";
-      box.innerHTML = emptyState("📍", msg);
-      toast(msg, "error");
-      resetNearbyBtn();
-    },
-    { enableHighAccuracy: true, timeout: 12_000, maximumAge: 30_000 },
-  );
+  try {
+    const pos = await getLocation();
+    const data = await hibrit("action.asp", {
+      FNC: "YakinDuraklar",
+      LAT: pos.coords.latitude,
+      LNG: pos.coords.longitude,
+      MSF: 500,
+    });
+    const rows = data?.table || [];
+    if (!rows.length) {
+      box.innerHTML = emptyState("🚏", "500 m içinde durak bulunamadı.");
+      return;
+    }
+    box.innerHTML = `
+      <div class="section-head"><h3>En yakın duraklar</h3><span class="badge">${rows.length} sonuç</span></div>
+      ${rows.map(nearbyItem).join("")}
+    `;
+  } catch (err) {
+    const msg =
+      err?.code === 1 || /izin/i.test(err?.message || "")
+        ? "Konum izni verilmedi. Ayarlardan izin verin."
+        : err?.message || "Konum alınamadı. Tekrar deneyin.";
+    box.innerHTML = emptyState("📍", msg);
+    toast(msg, "error");
+  } finally {
+    resetNearbyBtn();
+  }
 
   function resetNearbyBtn() {
     btn.disabled = false;

@@ -165,7 +165,9 @@ olarak yükler. Gradle adımı yoktur.
 | Android (WebView) | Doğrudan `egocptsrvand` / `egocptngapi` | `file://` kaynağına evrensel erişim açık olduğu için yok |
 
 `public/app.js` içindeki `isNativeApp` ve `apiUrl()` bu seçimi yapar.
-`MainActivity`, JS tarafına `EGOBridge.isNative()` köprüsünü ekler.
+`MainActivity`, JS tarafına `EGOBridge.isNative()` ve `EGOBridge.requestLocation()`
+köprülerini ekler. Konum Android'de WebView'ın geolocation API'si yerine doğrudan
+`LocationManager` ile alınır; izin yalnızca "Konumumu kullan"a basıldığında istenir.
 
 ## Yasal not
 
