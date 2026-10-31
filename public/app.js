@@ -19,12 +19,12 @@ function esc(value) {
   }[c]));
 }
 
-/** Kalıcı cihaz kimliği (EGO UID parametresi). */
+/** Kalıcı cihaz kimliği (EGO UID parametresi - UUID v4). */
 const UID =
   localStorage.getItem("ego.uid") ||
   (() => {
-    const id = "4C19FF69-CF38-4765-A621-63D671359ED3-" +
-      String(Math.floor(Math.random() * 9_999_999_999));
+    // Tarayıcının güvenli rastgele sayı üretecini kullanarak gerçek UUID v4 oluşturur
+    const id = crypto.randomUUID();
     localStorage.setItem("ego.uid", id);
     return id;
   })();
@@ -164,6 +164,7 @@ function showView(name) {
   if (name === "lines") loadLines();
   if (name === "news") loadNews();
   if (name === "settings") loadSettings();
+  if (name === "favs") renderFavs();
   if (name === "home") loadHomeStatus();
 }
 
@@ -190,6 +191,7 @@ const state = {
   stopLines: [],        // durağın hatları
   liveTimer: null,
   liveTarget: null,     // { stop, line|null }
+  liveLoading: false,   // istek çakışmasını önler
   newsLoaded: false,
   settingsLoaded: false,
 };
@@ -285,7 +287,6 @@ function getLocation() {
   });
 }
 
-// Yakın duraklar
 $("#nearby-btn").addEventListener("click", async (e) => {
   const btn = e.currentTarget;
   const box = $("#home-nearby");
@@ -337,8 +338,12 @@ function nearbyItem(stop) {
     .filter(Boolean)
     .slice(0, 6);
 
+  const isFav = getFavs().some((s) => s.kod === stop.kod);
   return `
-    <button class="list-item" data-action="stop" data-kod="${esc(stop.kod)}" data-ad="${esc(stop.ad)}">
+    <div class="list-item" role="button" tabindex="0" data-action="stop" data-kod="${esc(stop.kod)}" data-ad="${esc(stop.ad)}">
+      <div class="fav-fav-ico" style="color:${isFav ? 'var(--warn)' : 'var(--muted)'}">
+        ${isFav ? "⭐" : "☆"}
+      </div>
       <span class="li-icon">🚏</span>
       <span class="li-main">
         <span class="li-title">${esc(stop.ad)}</span>
@@ -348,8 +353,11 @@ function nearbyItem(stop) {
         </span>
         ${lines.length ? `<span class="li-sub" style="margin-top:6px">${lines.map((l) => `<span class="tag">${esc(l)}</span>`).join("")}</span>` : ""}
       </span>
-      <span class="li-right">›</span>
-    </button>
+      <div class="fav-actns">
+        <button class="btn ${isFav ? "primary" : "ghost"} sm" data-action="fav-toggle">${isFav ? "Çıkar" : "Ekle"}</button>
+        <span class="li-right">›</span>
+      </div>
+    </div>
   `;
 }
 
@@ -387,15 +395,22 @@ async function searchStops() {
 }
 
 function stopItem(stop) {
+  const isFav = getFavs().some((s) => s.kod === stop.kod);
   return `
-    <button class="list-item" data-action="stop" data-kod="${esc(stop.kod)}" data-ad="${esc(stop.ad)}">
+    <div class="list-item" role="button" tabindex="0" data-action="stop" data-kod="${esc(stop.kod)}" data-ad="${esc(stop.ad)}">
+      <div class="fav-fav-ico" style="color:${isFav ? 'var(--warn)' : 'var(--muted)'}">
+        ${isFav ? "⭐" : "☆"}
+      </div>
       <span class="code-pill">${esc(stop.kod)}</span>
       <span class="li-main">
         <span class="li-title">${esc(stop.ad)}</span>
         <span class="li-sub">${esc(stop.konum || "")}</span>
       </span>
-      <span class="li-right">›</span>
-    </button>
+      <div class="fav-actns">
+        <button class="btn ${isFav ? "primary" : "ghost"} sm" data-action="fav-toggle">${isFav ? "Çıkar" : "Ekle"}</button>
+        <span class="li-right">›</span>
+      </div>
+    </div>
   `;
 }
 
@@ -653,6 +668,7 @@ const stopDetailBody = $("#stop-detail-body");
 async function openStopDetail(kod, ad) {
   stopLiveRefresh();
   state.currentStop = { kod, ad };
+  const isFav = getFavs().some((s) => s.kod === kod);
   showView("stop-detail");
 
   stopDetailBody.innerHTML = `
@@ -666,6 +682,13 @@ async function openStopDetail(kod, ad) {
     <div class="card">
       <div class="card-head"><h3>Canlı araçlar</h3><span class="badge" id="sd-live-time">—</span></div>
       <div id="sd-live"><div class="skeleton"></div><div class="skeleton"></div></div>
+    </div>
+
+    <div class="card" style="margin-top:12px">
+      <div class="card-head">
+        <h3>Favoriler</h3>
+        <button class="btn ${isFav ? "ghost" : "primary"} sm" id="sd-fav-btn">${isFav ? "Favorilerden Çıkar" : "Favorilere Ekle"}</button>
+      </div>
     </div>
 
     <div class="card">
@@ -688,6 +711,7 @@ async function openStopDetail(kod, ad) {
   // Geçen hatlar + canlı araçlar paralel
   loadStopLines(kod);
   loadStopLive(kod);
+  startLiveRefresh();
 }
 
 async function loadStopLines(kod) {
@@ -765,6 +789,18 @@ async function loadStopTimes(hat, tur) {
 
 // Durak detayındaki çip tıklamaları
 stopDetailBody.addEventListener("click", (e) => {
+  // "Favorilere Ekle / Çıkar" butonu (detay sayfası dinamik oluşturulur)
+  const favBtn = e.target.closest("#sd-fav-btn");
+  if (favBtn) {
+    if (!state.currentStop) return;
+    toggleFav(state.currentStop);
+    const fav = getFavs().some((s) => s.kod === state.currentStop.kod);
+    favBtn.textContent = fav ? "Favorilerden Çıkar" : "Favorilere Ekle";
+    favBtn.classList.toggle("primary", !fav);
+    favBtn.classList.toggle("ghost", fav);
+    return;
+  }
+
   const day = e.target.closest("[data-day]");
   if (day) {
     $("#sd-days").querySelectorAll(".chip").forEach((c) => c.classList.toggle("active", c === day));
@@ -785,11 +821,10 @@ stopDetailBody.addEventListener("click", (e) => {
 
 async function loadStopLive(kod) {
   const box = $("#sd-live");
+  state.liveTarget = { stop: kod, line: null };
   try {
     const data = await hibrit("srv.asp", { FNC: "Otobusler", DURAK: kod });
     renderVehicles(box, data?.table || []);
-    state.liveTarget = { stop: kod, line: null };
-    startLiveRefresh();
     const t = $("#sd-live-time");
     if (t) t.textContent = new Date().toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" });
   } catch (err) {
@@ -800,10 +835,12 @@ async function loadStopLive(kod) {
 /** Hat detayında yalnızca o hattın araçlarını getirir (FNC=Otobus). */
 async function loadLineLive(hat, durak, badge) {
   const box = $("#ld-live");
+  state.liveTarget = { stop: durak, line: hat };
   try {
     const data = await hibrit("srv.asp", { FNC: "Otobus", DURAK: durak, HAT: hat });
     renderVehicles(box, data?.table || []);
-    if (badge) badge.textContent = `${durak} durağına göre`;
+    const time = new Date().toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" });
+    if (badge) badge.textContent = `${durak} · ${time}`;
   } catch (err) {
     box.innerHTML = `<p class="muted small">Canlı veri alınamadı: ${esc(err.message)}</p>`;
   }
@@ -895,12 +932,27 @@ function vehicleCard(v) {
   `;
 }
 
-function startLiveRefresh() {
+function startLiveRefresh(intervalMs = 3_000) {
   stopLiveRefresh();
   state.liveTimer = setInterval(() => {
-    if (!$('[data-view="stop-detail"]').classList.contains("active")) return;
-    if (state.liveTarget?.stop) loadStopLive(state.liveTarget.stop);
-  }, 30_000);
+    const target = state.liveTarget;
+    if (!target) return;
+
+    const viewName = target.line ? "line-detail" : "stop-detail";
+    if (!$(`[data-view="${viewName}"]`)?.classList.contains("active")) return;
+
+    // Önceki istek hâlâ sürüyorsa yenisini başlatma
+    if (state.liveLoading) return;
+    state.liveLoading = true;
+
+    const job = target.line
+      ? loadLineLive(target.line, target.stop, $("#ld-live-badge"))
+      : loadStopLive(target.stop);
+
+    Promise.resolve(job).finally(() => {
+      state.liveLoading = false;
+    });
+  }, intervalMs);
 }
 
 function stopLiveRefresh() {
@@ -952,9 +1004,10 @@ async function openLineDetail(kod, ad) {
 
     $("#ld-count").textContent = `${stops.length} durak`;
 
-    // Canlı araçlar: hattın ilk durağına göre varışlar
+    // Canlı araçlar: hattın ilk durağına göre varışlar (3 sn'de bir yenilenir)
     if (stops[0]) {
       loadLineLive(kod, stops[0].kod, $("#ld-live-badge"));
+      startLiveRefresh();
     } else {
       $("#ld-live").innerHTML = `<p class="muted small">Canlı veri için durak bulunamadı.</p>`;
     }
@@ -1000,6 +1053,17 @@ document.addEventListener("click", (e) => {
 
   if (action === "stop") openStopDetail(kod, ad);
   if (action === "line") openLineDetail(kod, ad);
+});
+
+// Klavye ile seçim (role="button" öğeleri için)
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "Enter" && e.key !== " ") return;
+  if (e.target.tagName === "BUTTON") return;
+  const el = e.target.closest('[data-action="stop"], [data-action="line"]');
+  if (!el || !el.dataset.kod) return;
+  e.preventDefault();
+  if (el.dataset.action === "stop") openStopDetail(el.dataset.kod, el.dataset.ad);
+  if (el.dataset.action === "line") openLineDetail(el.dataset.kod, el.dataset.ad);
 });
 
 // ---------------- Geri butonları ----------------
@@ -1057,10 +1121,109 @@ function emptyState(icon, text) {
   return `<div class="empty"><div class="empty-ico">${icon}</div><p>${text}</p></div>`;
 }
 
+// ---------------- Favori Duraklar (localStorage) ----------------
+
+const FAV_KEY = "ego.favStops";
+
+function getFavs() {
+  try {
+    return JSON.parse(localStorage.getItem(FAV_KEY) || "[]");
+  } catch {
+    return [];
+  }
+}
+
+function setFavs(favs) {
+  localStorage.setItem(FAV_KEY, JSON.stringify(favs));
+}
+
+function toggleFav(stop) {
+  const favs = getFavs();
+  const idx = favs.findIndex((s) => s.kod === stop.kod);
+  if (idx >= 0) favs.splice(idx, 1);
+  else favs.push(stop);
+  setFavs(favs);
+  renderFavs();
+  toast(
+    idx >= 0 ? `"${stop.ad}" favorilerden çıkarıldı.` : `"${stop.ad}" favorilere eklendi.`,
+    idx >= 0 ? "info" : "ok",
+  );
+}
+
+function renderFavs() {
+  const favs = getFavs();
+  const favStack = $("#home-favs");
+  const favsList = $("#favs-list");
+
+  // Ana sayfada kart
+  if (favs.length) {
+    favStack.innerHTML =
+      `<p class="muted small">${favs.length} favori durak</p>` + favs.map(favItem).join("");
+  } else {
+    favStack.innerHTML = emptyState("⭐", "Henüz favori durak yok. Bir durak açın ve favorilere ekleyin.");
+  }
+
+  // Favoriler sayfasında liste
+  if (favs.length) {
+    favsList.innerHTML = favs.map(favItem).join("");
+  } else {
+    favsList.innerHTML = emptyState("⭐", "Favori duraklarınız boş.");
+  }
+}
+
+function favItem(stop) {
+  const isFav = getFavs().some((s) => s.kod === stop.kod);
+  return `
+    <div class="fav-item" role="button" tabindex="0" data-action="stop" data-kod="${esc(stop.kod)}" data-ad="${esc(stop.ad)}">
+      <div class="fav-left">
+        <svg class="fav-fav-ico" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78L12 21.23l8.84-8.84a5.5 5.5 0 0 0 0-7.78z" />
+        </svg>
+        <div class="fav-info">
+          <h4>${esc(stop.ad)}</h4>
+          <p>${esc(stop.kod)}</p>
+        </div>
+      </div>
+      <div class="fav-actns">
+        <button class="btn ${isFav ? "primary" : "ghost"}" data-action="fav-toggle">
+          ${isFav ? "Çıkar" : "Ekle"}
+        </button>
+      </div>
+    </div>
+  `;
+}
+
+// Favori toggle butonları (arama, yakın duraklar ve favori listeleri)
+document.addEventListener("click", (e) => {
+  const btn = e.target.closest("[data-action='fav-toggle']");
+  if (!btn) return;
+  const item = btn.closest(".list-item, .fav-item");
+  if (!item) return;
+
+  const stop = { kod: item.dataset.kod, ad: item.dataset.ad };
+  if (!stop.kod) return;
+
+  toggleFav(stop);
+
+  // Arama / yakın durak listelerinde ikonu ve butonu anında güncelle
+  if (item.classList.contains("list-item")) {
+    const fav = getFavs().some((s) => s.kod === stop.kod);
+    btn.textContent = fav ? "Çıkar" : "Ekle";
+    btn.classList.toggle("primary", fav);
+    btn.classList.toggle("ghost", !fav);
+    const ico = item.querySelector(".fav-fav-ico");
+    if (ico) {
+      ico.textContent = fav ? "⭐" : "☆";
+      ico.style.color = fav ? "var(--warn)" : "var(--muted)";
+    }
+  }
+});
+
 // ---------------- İlk yükleme ----------------
 
 loadHomeNews();
 loadHomeStatus();
+renderFavs();
 
 // Çevrimdışı/çevrimiçi bilgisi
 window.addEventListener("offline", () => toast("Bağlantı kesildi.", "error"));

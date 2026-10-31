@@ -60,6 +60,12 @@
         <div id="home-nearby" class="stack"></div>
 
         <div class="section-head">
+          <h3>Favori duraklar</h3>
+          <button class="link-btn" data-nav="favs">Yönet</button>
+        </div>
+        <div id="home-favs" class="fav-stack"></div>
+
+        <div class="section-head">
           <h3>Son duyurular</h3>
           <button class="link-btn" data-nav="news">Tümü</button>
         </div>
@@ -129,6 +135,15 @@
           <div class="skeleton"></div>
           <div class="skeleton"></div>
         </div>
+      </section>
+
+      <!-- ================= FAVORİLER ================= -->
+      <section class="view" data-view="favs">
+        <div class="view-head">
+          <h2>Favori duraklar</h2>
+          <p class="muted">Sık kullandığınız durakları buraya ekleyin.</p>
+        </div>
+        <div id="favs-list" class="stack"></div>
       </section>
 
       <!-- ================= AYARLAR ================= -->
@@ -204,6 +219,10 @@
       <button data-nav="home" class="active">
         <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="m3 11 9-8 9 8" /><path d="M5 10v10h14V10" /></svg>
         <span>Ana</span>
+      </button>
+      <button data-nav="favs">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78L12 21.23l8.84-8.84a5.5 5.5 0 0 0 0-7.78z" /></svg>
+        <span>Favoriler</span>
       </button>
       <button data-nav="stops">
         <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
